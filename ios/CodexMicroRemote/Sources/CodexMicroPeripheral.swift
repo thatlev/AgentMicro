@@ -622,11 +622,17 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
     /// Starts or stops provider-native voice capture for one concrete editor
     /// target. The extension rejects this command for terminals, file tabs,
     /// and providers that do not expose a voice API.
-    func setVSCodeNativeVoice(_ active: Bool, targetID: String? = nil, surface: String = "vscode") {
+    func setVSCodeNativeVoice(
+        _ active: Bool,
+        targetID: String? = nil,
+        surface: String = "vscode",
+        autoSend: Bool = false
+    ) {
         var command: [String: Any] = [
             "cmd": "vscodeVoice",
             "surface": surface,
             "active": active,
+            "autoSend": autoSend,
         ]
         if let targetID, !targetID.isEmpty { command["target"] = targetID }
         sendBridgeControl(command)
@@ -707,6 +713,8 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
         let timer = Timer(timeInterval: foregroundHeartbeatInterval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, self.hostConnected, !self.isSuspended else { return }
+                self.refreshBattery()
+                self.sendDeviceStatus()
                 self.requestLatestHostState()
             }
         }

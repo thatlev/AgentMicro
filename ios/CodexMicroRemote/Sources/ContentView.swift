@@ -298,7 +298,8 @@ struct ContentView: View {
     @AppStorage("codexMicro.t3CodeCustomCommand") private var t3CodeCustomLauncherValue = ""
     @AppStorage("codexMicro.claudeCodeLauncher") private var claudeCodeLauncherRaw = WorkspaceLauncher.claudeNewSession.rawValue
     @AppStorage("codexMicro.claudeCodeCustomLink") private var claudeCodeCustomLauncherValue = ""
-    @AppStorage("codexMicro.voiceAutoSend") private var voiceAutoSend = false
+    @AppStorage("codexMicro.codexVoiceAutoSend") private var codexVoiceAutoSend = false
+    @AppStorage("codexMicro.t3VoiceAutoSend") private var t3VoiceAutoSend = false
     @AppStorage("codexMicro.useMacProviderVoice") private var useMacProviderVoice = false
     @AppStorage("codexMicro.codexMicSource") private var codexMicSourceRaw = CodexMicSource.computer.rawValue
     @State private var isShowingDetails = false
@@ -364,7 +365,7 @@ struct ContentView: View {
             mode: surfaceMode,
             page: page,
             voiceRecorder: voiceRecorder,
-            autoSendVoicePrompts: voiceAutoSend,
+            autoSendVoicePrompts: page == .t3Code ? t3VoiceAutoSend : codexVoiceAutoSend,
             useMacProviderVoice: useMacProviderVoice,
             codexMicSource: codexMicSource,
             workspaceLauncher: selectedLauncher(for: page),
@@ -783,7 +784,8 @@ private struct HardwareConsole: View {
                                     peripheral.setVSCodeNativeVoice(
                                         active,
                                         targetID: targetID,
-                                        surface: page.hostTarget
+                                        surface: page.hostTarget,
+                                        autoSend: autoSendVoicePrompts
                                     )
                                 }
                             ) { text, targetID, autoSend in
@@ -1257,7 +1259,7 @@ private struct HardwareConsole: View {
             WorkspaceActionKey(key: "ACT06", action: "fast", label: "FAST", symbol: "bolt.fill", accent: 0x168AFF),
             WorkspaceActionKey(key: "ACT07", action: "new", label: "NEW", symbol: "square.and.pencil", accent: 0x168A55),
             WorkspaceActionKey(key: "ACT08", action: "pin", label: "PIN", symbol: "pin.fill", accent: 0x8B5CF6),
-            WorkspaceActionKey(key: "ACT09", action: "fork", label: "FORK", symbol: "arrow.triangle.branch", accent: 0x5856D6)
+            WorkspaceActionKey(key: "ACT09", action: "clear", label: "CLEAR", symbol: "trash", accent: 0x5B6675)
         ]
         let configured = workspaceState.actionKeys.indices.contains(index)
             ? workspaceState.actionKeys[index]
@@ -3399,7 +3401,8 @@ private struct DeviceDetailsSheet: View {
     @AppStorage("codexMicro.vscodeCustomCommand") private var vscodeCustomLauncherValue = ""
     @AppStorage("codexMicro.claudeCodeLauncher") private var claudeCodeLauncherRaw = WorkspaceLauncher.claudeNewSession.rawValue
     @AppStorage("codexMicro.claudeCodeCustomLink") private var claudeCodeCustomLauncherValue = ""
-    @AppStorage("codexMicro.voiceAutoSend") private var voiceAutoSend = false
+    @AppStorage("codexMicro.codexVoiceAutoSend") private var codexVoiceAutoSend = false
+    @AppStorage("codexMicro.t3VoiceAutoSend") private var t3VoiceAutoSend = false
     @AppStorage("codexMicro.useMacProviderVoice") private var useMacProviderVoice = false
 
     var body: some View {
@@ -3420,7 +3423,12 @@ private struct DeviceDetailsSheet: View {
                 }
 
                 Section("Voice prompts") {
-                    Toggle("Auto-send after dictation", isOn: $voiceAutoSend)
+                    Toggle(
+                        page == .t3Code
+                            ? "Auto-send after T3 dictation"
+                            : "Auto-send after Codex dictation",
+                        isOn: page == .t3Code ? $t3VoiceAutoSend : $codexVoiceAutoSend
+                    )
 
                     Text(page == .t3Code
                         ? "On T3 Code, the microphone key controls macOS Dictation in the Mac composer. Hold to talk, or double-tap to latch."
@@ -3573,7 +3581,7 @@ private struct DeviceDetailsSheet: View {
                     controlRow("Dial", detail: "Turn to navigate composer controls; press to open; hold 500 ms for settings.")
                     controlRow("Joystick", detail: "Up Plan · right Forward · down Sidebar · left Back.")
                     controlRow("Command row", detail: "Fast · Approve · Decline · Continue in new chat.")
-                    controlRow("Microphone", detail: voiceAutoSend
+                    controlRow("Microphone", detail: selectedVoiceAutoSend
                         ? "Hold to talk; recognized prompts send automatically. Double-press to latch."
                         : "Hold to talk; double-press to latch; press again to stop.")
                     controlRow("Codex", detail: "Sends the current composer message.")
@@ -3604,6 +3612,10 @@ private struct DeviceDetailsSheet: View {
                 }
             }
         }
+    }
+
+    private var selectedVoiceAutoSend: Bool {
+        page == .t3Code ? t3VoiceAutoSend : codexVoiceAutoSend
     }
 
     private var bluetoothState: String {
