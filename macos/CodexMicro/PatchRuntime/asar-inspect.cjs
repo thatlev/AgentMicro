@@ -16,6 +16,7 @@ const fieldIndex = cliArguments.indexOf('--field');
 const requestedField = fieldIndex >= 0 ? cliArguments[fieldIndex + 1] : null;
 const verifyIntegrity = cliArguments.includes('--verify-integrity');
 const openAITeamIdentifier = '2DC432GLL2';
+const expectedShimSchema = 2;
 
 function fail(message) {
   const result = {
@@ -212,9 +213,20 @@ try {
   );
 
   const shimPresent = fileSet.has('codex-hid-shim.js');
+  let shimSchema = null;
+  if (shimPresent) {
+    const shimSource = readEntry('codex-hid-shim.js').toString('utf8');
+    const schemaMatch = shimSource.match(
+      /\bCODEX_MICRO_SHIM_SCHEMA\s*=\s*(\d+)\b/
+    );
+    if (schemaMatch) shimSchema = Number(schemaMatch[1]);
+  }
   const states = [nodeHIDState, serviceState, constructorState, rendererState];
   const allPristine = states.every((value) => value === 'pristine') && !shimPresent;
-  const allPatched = states.every((value) => value === 'patched') && shimPresent;
+  const patchedStructure =
+    states.every((value) => value === 'patched') && shimPresent;
+  const allPatched =
+    patchedStructure && shimSchema === expectedShimSchema;
 
   let verifiedFileCount = 0;
   let signedNativeExceptionCount = 0;
@@ -275,6 +287,8 @@ try {
     constructorState,
     rendererState,
     shimPresent,
+    shimSchema,
+    expectedShimSchema,
     integrityVerified: verifyIntegrity,
     verifiedFileCount,
     signedNativeExceptionCount,
@@ -297,6 +311,29 @@ try {
       reason: 'The Codex Micro patch is installed and matches this ChatGPT build.',
       details,
     });
+  }
+  if (
+    patchedStructure
+    && (shimSchema == null || shimSchema < expectedShimSchema)
+  ) {
+    output({
+      state: 'integration-update-required',
+      patched: true,
+      compatible: false,
+      reason:
+        'The Codex Micro integration needs an update. Choose Restore ChatGPT, then Patch ChatGPT to install the current integration.',
+      details,
+    }, 2);
+  }
+  if (patchedStructure && shimSchema > expectedShimSchema) {
+    output({
+      state: 'incompatible',
+      patched: true,
+      compatible: false,
+      reason:
+        'This ChatGPT integration was installed by a newer Codex Micro version. Update Codex Micro before changing it.',
+      details,
+    }, 2);
   }
 
   output({

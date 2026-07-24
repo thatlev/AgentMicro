@@ -6,6 +6,7 @@ enum ChatGPTPatchState: String, Codable, Sendable {
     case runtimeUnavailable = "runtime-unavailable"
     case compatiblePristine = "compatible-pristine"
     case compatiblePatched = "compatible-patched"
+    case integrationUpdateRequired = "integration-update-required"
     case incompatible
 
     var isPatched: Bool { self == .compatiblePatched }

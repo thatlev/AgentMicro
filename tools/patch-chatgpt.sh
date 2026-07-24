@@ -35,6 +35,7 @@ LEGACY_BACKUP_ROOT="${CODEX_MICRO_LEGACY_BACKUP_ROOT:-$HOME/.codexbridge/backup}
 STATE_ROOT="${CODEX_MICRO_STATE_ROOT:-$HOME/Library/Application Support/CodexMicro}"
 DEVELOPER_FALLBACK="${CODEX_MICRO_DEVELOPER_FALLBACK:-}"
 OPENAI_TEAM_IDENTIFIER="2DC432GLL2"
+PATCH_SCHEMA=2
 MODE="patch"
 JSON_OUTPUT=0
 RELAUNCH=0
@@ -445,6 +446,13 @@ inspect_installation() {
     PATCHED="$(json_field "$inspection_json" patched)"
     COMPATIBLE="$(json_field "$inspection_json" compatible)"
     STATUS_REASON="$(json_field "$inspection_json" reason)"
+    if [ "$PATCH_STATE" = "integration-update-required" ]; then
+        if [ "$BACKUP_AVAILABLE" = true ]; then
+            STATUS_REASON="The Codex Micro integration needs an update. Choose Restore ChatGPT, then Patch ChatGPT to install the current integration."
+        else
+            STATUS_REASON="The Codex Micro integration needs an update, but no exact backup is available. Reinstall ChatGPT, then choose Patch ChatGPT."
+        fi
+    fi
 }
 
 emit_status_json() {
@@ -1013,7 +1021,7 @@ cp -pR "$WORK/app.asar.unpacked" "$STAGED_RESOURCES/app.asar.unpacked"
     || die "staging" "ElectronAsarIntegrity could not be updated."
 /usr/libexec/PlistBuddy -c "Delete :CodexMicroPatch" "$STAGED_APP/Contents/Info.plist" 2>/dev/null || true
 /usr/libexec/PlistBuddy -c "Add :CodexMicroPatch dict" "$STAGED_APP/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Add :CodexMicroPatch:Schema integer 1" "$STAGED_APP/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :CodexMicroPatch:Schema integer $PATCH_SCHEMA" "$STAGED_APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :CodexMicroPatch:SourceVersion string $VERSION" "$STAGED_APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :CodexMicroPatch:SourceBuild string $BUILD" "$STAGED_APP/Contents/Info.plist"
 

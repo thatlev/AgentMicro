@@ -33,6 +33,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var isBusy = false
     @Published private(set) var canPatch = false
     @Published private(set) var canRestore = false
+    @Published private(set) var integrationNeedsUpdate = false
 
     private let bridgeEngine: CodexMicroBridgeEngine
     private let patchManager: PatchManager
@@ -336,6 +337,7 @@ final class AppModel: ObservableObject {
         let patch = patchManager.snapshot
         canPatch = patch.canPatch
         canRestore = patch.canRestore
+        integrationNeedsUpdate = patch.state == .integrationUpdateRequired
         phoneStatus = phoneStatusText
         patchStatusText = patchStatus
         chatGPTStatus = chatGPTStatusText
@@ -382,6 +384,11 @@ final class AppModel: ObservableObject {
             overallState = .actionRequired
             headline = "ChatGPT needs the integration"
             detail = "Use Patch ChatGPT once, then Codex Micro can verify the complete route."
+            return
+        case .integrationUpdateRequired:
+            overallState = .actionRequired
+            headline = "ChatGPT integration needs update"
+            detail = patch.reason
             return
         case .incompatible:
             overallState = .actionRequired
@@ -503,7 +510,14 @@ final class AppModel: ObservableObject {
         guard patch.installed else { return "Not found" }
         guard patch.running else { return "Not running" }
         guard patch.state == .compatiblePatched else {
-            return patch.state == .compatiblePristine ? "Patch required" : "Integration unavailable"
+            switch patch.state {
+            case .compatiblePristine:
+                return "Patch required"
+            case .integrationUpdateRequired:
+                return "Update required"
+            default:
+                return "Integration unavailable"
+            }
         }
         if bridgeStatus.isOperational { return "Verified" }
         if bridgeStatus.chatGPTLinked { return "Checking" }
@@ -520,6 +534,8 @@ final class AppModel: ObservableObject {
             return "Patch required"
         case .compatiblePatched:
             return "Compatible & patched"
+        case .integrationUpdateRequired:
+            return "Update required"
         case .incompatible:
             return patchManager.snapshot.patched
                 ? "Patch needs update"
@@ -584,7 +600,9 @@ final class AppModel: ObservableObject {
     private func notifyIfNewUnpatchedBuild() {
         let snapshot = patchManager.snapshot
         guard snapshot.installed,
-              snapshot.state == .compatiblePristine || snapshot.state == .incompatible
+              snapshot.state == .compatiblePristine
+                || snapshot.state == .integrationUpdateRequired
+                || snapshot.state == .incompatible
         else {
             return
         }
@@ -601,9 +619,14 @@ final class AppModel: ObservableObject {
 
         let content = UNMutableNotificationContent()
         content.title = "ChatGPT integration needs attention"
-        content.body = snapshot.state == .compatiblePristine
-            ? "A ChatGPT build without the Codex Micro integration was detected."
-            : "This ChatGPT build no longer matches the supported integration."
+        switch snapshot.state {
+        case .compatiblePristine:
+            content.body = "A ChatGPT build without the Codex Micro integration was detected."
+        case .integrationUpdateRequired:
+            content.body = "Restore ChatGPT, then patch it to update the Codex Micro integration."
+        default:
+            content.body = "This ChatGPT build no longer matches the supported integration."
+        }
         content.sound = .default
         let request = UNNotificationRequest(
             identifier: "codex-micro-chatgpt-\(identity.hashValue)",

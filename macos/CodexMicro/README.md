@@ -78,18 +78,25 @@ signed; reinstall ChatGPT to recover OpenAI's signature.
 
 ## Clean reconnect
 
-1. Keep Codex Micro open on the iPhone.
-2. Choose **Reconnect** from the Mac menu-bar popover.
-3. Open ChatGPT.
-4. If the Integration row says **Patch required**, confirm **Patch ChatGPT**
-   and allow App Management when macOS asks.
-5. Wait for a fresh end-to-end round trip. The attention dot disappears only
-   when ChatGPT and the iPhone have successfully exchanged data.
+1. Stop direct T3 Code or any command-line bridge that currently owns the
+   iPhone's BLE connection.
+2. Keep Codex Micro Remote open on the iPhone.
+3. Choose **Reconnect** from the Mac menu-bar popover.
+4. Open ChatGPT.
+5. If Integration says **Update required**, choose **Restore ChatGPT**, wait
+   for restoration to finish, then choose **Patch ChatGPT**. If it says
+   **Patch required**, patch directly. Allow App Management when macOS asks.
+6. Wait for a fresh end-to-end round trip. The attention dot disappears only
+   after ChatGPT and the iPhone successfully exchange matched data.
+
+The menu-bar state describes the ChatGPT route. The current iPhone build is
+T3-only at the control-surface level, and direct T3 Code uses a separate BLE
+connection, so test the two paths sequentially.
 
 ## Signing and notarization
 
 With no environment variables, the scripts apply an ad-hoc signature suitable
-for testing on the developer's Mac:
+for testing on the developer's Mac. It is not a public-distribution artifact:
 
 ```bash
 scripts/package-dmg.sh

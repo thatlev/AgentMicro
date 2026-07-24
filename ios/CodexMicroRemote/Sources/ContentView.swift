@@ -2,7 +2,7 @@
 //  ContentView.swift
 //  CodexMicroRemote
 //
-//  A responsive, touch-first recreation of the Work Louder Codex Micro.
+//  A responsive, touch-first Codex Micro remote.
 //
 
 import SwiftUI
@@ -83,10 +83,9 @@ enum ControlPage: Int, CaseIterable, Identifiable {
 
     var id: Int { rawValue }
 
-    /// Pages actually shown in the swipe/dots. The T3 Code page is a first-class
-    /// isolated surface that talks straight to the open-source T3 server over the
-    /// LAN (no Mac bridge). VS Code remains implemented but parked.
-    static let displayed: [ControlPage] = [.codex, .claudeCode, .t3Code]
+    /// The shipped phone app is one focused T3 Code remote. Legacy surfaces
+    /// remain in the source for protocol reference but are not user-facing.
+    static let displayed: [ControlPage] = [.t3Code]
     var isDisplayed: Bool { ControlPage.displayed.contains(self) }
 
     var title: String {
@@ -291,7 +290,7 @@ private struct ScrollTouchDelayDisabler: UIViewRepresentable {
 struct ContentView: View {
     @EnvironmentObject private var peripheral: CodexMicroPeripheral
     @AppStorage("codexMicro.controlSurfaceMode") private var surfaceModeRaw = ControlSurfaceMode.framed.rawValue
-    @AppStorage("codexMicro.controlPage") private var pageRaw = ControlPage.codex.rawValue
+    @AppStorage("codexMicro.controlPage") private var pageRaw = ControlPage.t3Code.rawValue
     @AppStorage("codexMicro.vscodeLauncher") private var vscodeLauncherRaw = WorkspaceLauncher.claudeExtension.rawValue
     @AppStorage("codexMicro.vscodeCustomCommand") private var vscodeCustomLauncherValue = ""
     @AppStorage("codexMicro.t3CodeLauncher") private var t3CodeLauncherRaw = WorkspaceLauncher.t3NewSession.rawValue
@@ -390,9 +389,8 @@ struct ContentView: View {
     }
 
     private var selectedPage: ControlPage {
-        let page = ControlPage(rawValue: pageRaw) ?? .codex
-        // Never resolve to a hidden page (e.g. a persisted T3 selection).
-        return page.isDisplayed ? page : .codex
+        let page = ControlPage(rawValue: pageRaw) ?? .t3Code
+        return page.isDisplayed ? page : .t3Code
     }
 
     private var pageBinding: Binding<ControlPage> {
@@ -520,7 +518,7 @@ struct ContentView: View {
             return "Connected to your Mac"
         }
         if peripheral.bridgeMode, peripheral.isAdvertising {
-            return "Waiting for the Mac helper"
+            return "Waiting for T3 Code"
         }
         return "iPhone control surface"
     }
@@ -565,9 +563,7 @@ struct ContentView: View {
             return ("Starting", "ellipsis.circle.fill", .secondary)
         }
         if peripheral.isAdvertising {
-            return peripheral.bridgeMode
-                ? ("Waiting for Mac helper", "dot.radiowaves.left.and.right", .blue)
-                : ("Ready to pair", "dot.radiowaves.left.and.right", .blue)
+            return ("Waiting for T3 Code", "dot.radiowaves.left.and.right", .blue)
         }
         return ("Ready", "checkmark.circle.fill", Color(packedRGB: 0x168A55))
     }
@@ -715,8 +711,8 @@ private struct HardwareConsole: View {
                         JoystickControl { angle, distance in
                             if page == .codex {
                                 peripheral.sendJoystick(angle: angle, distance: distance)
-                            } else if page == .claudeCode {
-                                routeClaudeJoystick(angle: angle, distance: distance)
+                            } else {
+                                routeWorkspaceJoystick(angle: angle, distance: distance)
                             }
                         }
                         .frame(width: keySide, height: keySide)
@@ -896,7 +892,7 @@ private struct HardwareConsole: View {
     private func shell(side: CGFloat) -> some View {
         let shellCorner = side * 0.102
         let plateCorner = side * 0.055
-        let bright = max(0, min(1, peripheral.lightingBrightness ?? 1))
+        let bright = max(0, min(1, peripheral.effectiveLightingBrightness))
         let activeSnake = casingSnake ?? hostThreadSnake
         let dialGreen = Color(packedRGB: 0x39D98A)
         let dialPulseIsActive = dialPulseStrength > 0.001
@@ -1012,7 +1008,7 @@ private struct HardwareConsole: View {
         let ink = highlighted ? glowColor : Color.black.opacity(0.64)
         let glowRadius = max(1.5, side * 0.011)
 
-        Text("WORK LOUDER · OPENAI 2026")
+        Text("CODEX MICRO · REMOTE")
             .font(highlighted ? inscriptionFont.weight(.semibold) : inscriptionFont)
             .foregroundStyle(ink)
             .shadow(color: highlighted ? glowColor.opacity(0.75) : .clear, radius: glowRadius)
@@ -1043,7 +1039,7 @@ private struct HardwareConsole: View {
         AgentKeyView(
             light: light(at: index),
             index: index,
-            brightness: peripheral.lightingBrightness ?? 1
+            brightness: peripheral.effectiveLightingBrightness
         ) { pressing in
             // AG00 is deliberately not replaced with an invented "cancel"
             // command. ChatGPT contextually interprets this exact Agent Key 1
@@ -1224,10 +1220,9 @@ private struct HardwareConsole: View {
         }
     }
 
-    /// Claude's four joystick directions map to Claude Desktop's own commands:
-    /// right Browser, down Terminal, left Side Chat, and up /frontend-max.
-    /// Only the Claude surface emits these private key IDs.
-    private func routeClaudeJoystick(angle: Double, distance: Double) {
+    /// Workspace pages emit one cardinal action per deflection. T3 Code maps
+    /// these to plan mode, sidebar, and back/forward navigation.
+    private func routeWorkspaceJoystick(angle: Double, distance: Double) {
         guard distance >= 0.28 else {
             activeClaudeJoystickDirection = nil
             return
@@ -3519,12 +3514,12 @@ private struct DeviceDetailsSheet: View {
                         .foregroundStyle(.secondary)
                     }
                 } else if peripheral.publishedServicesReady || peripheral.isAdvertising || peripheral.hostConnected {
-                    Section(peripheral.bridgeMode ? "Connect via the Mac helper" : "Connect to your Mac") {
+                    Section(peripheral.bridgeMode ? "Connect via Codex Micro for Mac" : "Connect to your Mac") {
                         if peripheral.bridgeMode {
                             setupStep(1, "Keep Codex Micro Remote open on this iPhone.")
-                            setupStep(2, "On your Mac, build the helper once from the repo: swiftc -O tools/CodexMicroBridge/main.swift tools/CodexMicroBridge/T3Backend.swift -o tools/CodexMicroBridge/codexbridge")
-                            setupStep(3, "One time only, patch ChatGPT so it accepts the helper: ./tools/patch-chatgpt.sh (re-run it after each ChatGPT update).")
-                            setupStep(4, "Run ./tools/CodexMicroBridge/codexbridge — no sudo needed. It links to this iPhone and relays it to ChatGPT.")
+                            setupStep(2, "Install and open Codex Micro from the Mac DMG.")
+                            setupStep(3, "From its menu-bar icon, choose Patch ChatGPT and follow the confirmation.")
+                            setupStep(4, "Open ChatGPT, then use Reconnect in the Codex Micro menu if the status is not yet healthy.")
                         } else {
                             setupStep(1, "Keep Codex Micro Remote open on this iPhone.")
                             setupStep(2, "On your Mac, open System Settings › Bluetooth and select “Codex Micro.”")

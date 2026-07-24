@@ -103,11 +103,18 @@ struct OnboardingView: View {
                 status: model.patchStatusText,
                 tone: patchTone
             ) {
-                Button("Patch ChatGPT…") {
+                Button(model.integrationNeedsUpdate ? "Restore ChatGPT…" : "Patch ChatGPT…") {
                     pendingPatchConfirmation = true
                 }
-                .disabled(model.isBusy || !model.canPatch)
-                .help("Review and apply the ChatGPT integration.")
+                .disabled(
+                    model.isBusy
+                        || (model.integrationNeedsUpdate ? !model.canRestore : !model.canPatch)
+                )
+                .help(
+                    model.integrationNeedsUpdate
+                        ? "Restore the prior integration before applying its update."
+                        : "Review and apply the ChatGPT integration."
+                )
             }
 
             OnboardingStep(
@@ -124,14 +131,23 @@ struct OnboardingView: View {
                 .help("Run all connection checks now.")
             }
         }
-        .alert("Patch ChatGPT?", isPresented: $pendingPatchConfirmation) {
+        .alert(
+            model.integrationNeedsUpdate ? "Restore before updating?" : "Patch ChatGPT?",
+            isPresented: $pendingPatchConfirmation
+        ) {
             Button("Cancel", role: .cancel) {}
-            Button("Patch & Reopen") {
-                model.patchChatGPT()
+            Button(model.integrationNeedsUpdate ? "Restore & Reopen" : "Patch & Reopen") {
+                if model.integrationNeedsUpdate {
+                    model.restoreChatGPT()
+                } else {
+                    model.patchChatGPT()
+                }
             }
         } message: {
             Text(
-                "Codex Micro will ask ChatGPT to close normally, modify its local app resources, re-sign it locally, then reopen it. ChatGPT may ask you to sign in or approve permissions again. Updates remove the patch. Codex Micro never force-quits ChatGPT."
+                model.integrationNeedsUpdate
+                    ? "Step 1 of 2: Codex Micro will restore the validated backup and reopen ChatGPT. When restoration finishes, choose Patch ChatGPT to install the current integration. Codex Micro never force-quits ChatGPT."
+                    : "Codex Micro will ask ChatGPT to close normally, modify its local app resources, re-sign it locally, then reopen it. ChatGPT may ask you to sign in or approve permissions again. Updates remove the patch. Codex Micro never force-quits ChatGPT."
             )
         }
     }
