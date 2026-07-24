@@ -2,60 +2,71 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var model: AppModel
-    let onOpenOnboarding: () -> Void
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                heading
-                connectionSection
-                generalSection
-                chatGPTSection
-                diagnosticsSection
-                aboutSection
-            }
-            .padding(22)
+        TabView {
+            SetupSettingsTab(model: model)
+                .tabItem {
+                    Label("Setup", systemImage: "rectangle.connected.to.line.below")
+                }
+
+            GeneralSettingsTab(model: model)
+                .tabItem {
+                    Label("General", systemImage: "gearshape")
+                }
+
+            IntegrationSettingsTab(model: model)
+                .tabItem {
+                    Label("Integration", systemImage: "link")
+                }
+
+            AdvancedSettingsTab(model: model)
+                .tabItem {
+                    Label("Advanced", systemImage: "ellipsis.circle")
+                }
         }
-        .frame(minWidth: 440, idealWidth: 470, minHeight: 510, idealHeight: 570)
+        .padding(.top, 8)
+        .frame(minWidth: 590, idealWidth: 620, minHeight: 440, idealHeight: 480)
         .background(Color(nsColor: .windowBackgroundColor))
     }
+}
 
-    private var heading: some View {
-        HStack(spacing: 12) {
-            MicroGlyphView(size: 28)
+private struct SetupSettingsTab: View {
+    @ObservedObject var model: AppModel
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Codex Micro")
-                    .font(.title3.weight(.semibold))
-                Text(model.headline)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+    var body: some View {
+        SettingsPage(title: "Connection", subtitle: "Green means the complete route exchanged real data.") {
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: overallTone.systemImage)
+                            .font(.title2)
+                            .foregroundStyle(overallTone.color)
+                            .accessibilityHidden(true)
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(model.headline)
+                                .font(.headline)
+                            Text(model.detail)
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer()
+                        StatusPill(text: statusLabel, tone: overallTone)
+                    }
+
+                    Divider()
+                    ConnectionRail(stages: connectionStages)
+                }
             }
 
-            Spacer()
-
-            StatusPill(text: statusLabel, tone: overallTone)
-        }
-    }
-
-    private var connectionSection: some View {
-        settingsSection("Connection") {
-            ConnectionRail(stages: connectionStages)
-                .padding(.vertical, 2)
-
-            Divider()
-
-            StatusRow(
-                icon: "arrow.left.arrow.right",
-                title: "Last verified round trip",
-                value: model.lastRoundTripText
-            )
-
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 ActionButton(
-                    title: "Reconnect",
+                    title: "Check connection",
                     systemImage: "arrow.clockwise",
-                    help: "Recheck every part of the connection.",
+                    help: "Recheck the iPhone, Mac bridge, and ChatGPT route.",
                     isDisabled: model.isBusy
                 ) {
                     model.reconnect()
@@ -64,131 +75,28 @@ struct SettingsView: View {
                 ActionButton(
                     title: "Open ChatGPT",
                     systemImage: "arrow.up.forward.app",
-                    help: "Open ChatGPT.",
+                    help: "Open ChatGPT without changing its integration.",
                     isDisabled: model.isBusy
                 ) {
                     model.openChatGPT()
                 }
             }
-        }
-    }
 
-    private var generalSection: some View {
-        settingsSection("General") {
-            Toggle(
-                "Launch Codex Micro at login",
-                isOn: Binding(
-                    get: { model.launchAtLogin },
-                    set: { model.setLaunchAtLogin($0) }
-                )
-            )
-            .toggleStyle(.switch)
-            .help("Keep Codex Micro available after you sign in to this Mac.")
-
-            Divider()
-
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(model.isPaused ? "Bridge is paused" : "Bridge is active")
-                        .font(.callout.weight(.medium))
-                    Text(
-                        model.isPaused
-                            ? "No connection events are being forwarded."
-                            : "Codex Micro is available from the menu bar."
-                    )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            if model.showOnboarding {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Setup is ready to finish")
+                            .font(.callout.weight(.medium))
+                        Text("You can return here whenever the connection needs attention.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Finish Setup") {
+                        model.completeOnboarding()
+                    }
+                    .keyboardShortcut(.defaultAction)
                 }
-
-                Spacer()
-
-                Button(model.isPaused ? "Resume" : "Pause") {
-                    model.togglePause()
-                }
-                .disabled(model.isBusy)
-                .help(model.isPaused ? "Resume connection handling." : "Pause connection handling.")
-            }
-        }
-    }
-
-    private var chatGPTSection: some View {
-        settingsSection("ChatGPT Integration") {
-            StatusRow(
-                icon: "bubble.left.and.bubble.right",
-                title: "ChatGPT",
-                value: model.chatGPTStatus,
-                tone: chatGPTTone
-            )
-            StatusRow(
-                icon: "wrench.and.screwdriver",
-                title: "Patch",
-                value: model.patchStatusText,
-                tone: patchTone
-            )
-
-            Text(
-                "Patching is always manual. Codex Micro asks ChatGPT to close and never force-quits it."
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-
-            PatchActionButtons(model: model, compact: true)
-        }
-    }
-
-    private var diagnosticsSection: some View {
-        settingsSection("Diagnostics") {
-            Text(
-                "Diagnostics stay on this Mac. Codex Micro does not send telemetry."
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
-            HStack(spacing: 8) {
-                ActionButton(
-                    title: "Copy diagnostics",
-                    systemImage: "doc.on.doc",
-                    help: "Copy a redacted diagnostic report.",
-                    isDisabled: model.isBusy
-                ) {
-                    model.copyDiagnostics()
-                }
-
-                ActionButton(
-                    title: "Open logs",
-                    systemImage: "folder",
-                    help: "Reveal local rotating logs.",
-                    isDisabled: model.isBusy
-                ) {
-                    model.openLogs()
-                }
-            }
-        }
-    }
-
-    private var aboutSection: some View {
-        HStack {
-            Text("Version \(versionText)")
-            Spacer()
-            Button("Run Setup Guide…", action: onOpenOnboarding)
-                .buttonStyle(.link)
-                .help("Review pairing, permissions, and ChatGPT integration.")
-        }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 2)
-    }
-
-    @ViewBuilder
-    private func settingsSection<Content: View>(
-        _ title: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
-            SectionLabel(title: title)
-            QuietCard {
-                VStack(alignment: .leading, spacing: 11, content: content)
             }
         }
     }
@@ -205,20 +113,12 @@ struct SettingsView: View {
 
     private var statusLabel: String {
         switch model.overallState {
-        case .healthy: return "Verified"
+        case .healthy: return "Connected"
         case .connecting: return "Connecting"
         case .actionRequired: return "Action needed"
         case .failed: return "Failed"
         case .idle: return model.isPaused ? "Paused" : "Idle"
         }
-    }
-
-    private var chatGPTTone: StatusTone {
-        StatusTone.inferred(from: model.chatGPTStatus, fallback: overallTone)
-    }
-
-    private var patchTone: StatusTone {
-        StatusTone.inferred(from: model.patchStatusText, fallback: overallTone)
     }
 
     private var connectionStages: [ConnectionRail.Stage] {
@@ -242,9 +142,183 @@ struct SettingsView: View {
                 title: "ChatGPT",
                 detail: model.chatGPTStatus,
                 icon: "bubble.left.and.bubble.right",
-                tone: chatGPTTone
+                tone: StatusTone.inferred(from: model.chatGPTStatus, fallback: overallTone)
             ),
         ]
+    }
+}
+
+private struct GeneralSettingsTab: View {
+    @ObservedObject var model: AppModel
+
+    var body: some View {
+        SettingsPage(title: "General", subtitle: "Keep the companion ready without unnecessary background work.") {
+            SettingsCard {
+                VStack(spacing: 0) {
+                    settingsToggle(
+                        title: "Launch at Login",
+                        detail: "Start Codex Micro when you sign in to this Mac.",
+                        isOn: Binding(
+                            get: { model.launchAtLogin },
+                            set: { model.setLaunchAtLogin($0) }
+                        )
+                    )
+
+                    Divider().padding(.vertical, 12)
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(model.isPaused ? "Bridge paused" : "Bridge active")
+                                .font(.callout.weight(.medium))
+                            Text(
+                                model.isPaused
+                                    ? "No control messages are being forwarded."
+                                    : "Listening only for the lightweight iPhone and ChatGPT bridge."
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button(model.isPaused ? "Resume" : "Pause") {
+                            model.togglePause()
+                        }
+                        .disabled(model.isBusy)
+                    }
+                }
+            }
+        }
+    }
+
+    private func settingsToggle(
+        title: String,
+        detail: String,
+        isOn: Binding<Bool>
+    ) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.callout.weight(.medium))
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+        }
+    }
+}
+
+private struct IntegrationSettingsTab: View {
+    @ObservedObject var model: AppModel
+
+    var body: some View {
+        SettingsPage(
+            title: "ChatGPT Integration",
+            subtitle: "Codex Micro changes ChatGPT only when you explicitly confirm it."
+        ) {
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    StatusRow(
+                        icon: "bubble.left.and.bubble.right",
+                        title: "ChatGPT",
+                        value: model.chatGPTStatus,
+                        tone: chatGPTTone
+                    )
+                    StatusRow(
+                        icon: "wrench.and.screwdriver",
+                        title: "Integration",
+                        value: model.patchStatusText,
+                        tone: patchTone
+                    )
+
+                    if model.integrationNeedsUpdate {
+                        Label {
+                            Text(
+                                "Update required: restore the version-matched backup first, then patch again. This should happen only after ChatGPT or Codex Micro changes."
+                            )
+                            .fixedSize(horizontal: false, vertical: true)
+                        } icon: {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(StatusTone.actionRequired.color)
+                        }
+                        .font(.caption)
+                    } else {
+                        Text(
+                            "ChatGPT updates remove the local integration. Codex Micro detects the new build and asks before restoring or patching; it never force-quits ChatGPT."
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    PatchActionButtons(model: model, compact: true)
+                }
+            }
+        }
+    }
+
+    private var overallTone: StatusTone {
+        switch model.overallState {
+        case .healthy: return .healthy
+        case .connecting: return .connecting
+        case .actionRequired: return .actionRequired
+        case .failed: return .failed
+        case .idle: return .idle
+        }
+    }
+
+    private var chatGPTTone: StatusTone {
+        StatusTone.inferred(from: model.chatGPTStatus, fallback: overallTone)
+    }
+
+    private var patchTone: StatusTone {
+        StatusTone.inferred(from: model.patchStatusText, fallback: overallTone)
+    }
+}
+
+private struct AdvancedSettingsTab: View {
+    @ObservedObject var model: AppModel
+
+    var body: some View {
+        SettingsPage(title: "Advanced", subtitle: "Local troubleshooting and app information.") {
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Diagnostics stay on this Mac and contain no message content.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    HStack(spacing: 10) {
+                        ActionButton(
+                            title: "Copy diagnostics",
+                            systemImage: "doc.on.doc",
+                            help: "Copy a redacted connection report.",
+                            isDisabled: model.isBusy
+                        ) {
+                            model.copyDiagnostics()
+                        }
+                        ActionButton(
+                            title: "Open logs",
+                            systemImage: "folder",
+                            help: "Reveal local rotating logs in Finder.",
+                            isDisabled: model.isBusy
+                        ) {
+                            model.openLogs()
+                        }
+                    }
+                }
+            }
+
+            HStack {
+                Text("Codex Micro \(versionText)")
+                Spacer()
+                Text("Apple silicon")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 2)
+        }
     }
 
     private var versionText: String {
@@ -254,12 +328,64 @@ struct SettingsView: View {
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
 
         switch (version, build) {
-        case let (.some(version), .some(build)):
-            return "\(version) (\(build))"
-        case let (.some(version), .none):
-            return version
-        default:
-            return "Development"
+        case let (.some(version), .some(build)): return "\(version) (\(build))"
+        case let (.some(version), .none): return version
+        default: return "Development"
         }
+    }
+}
+
+private struct SettingsPage<Content: View>: View {
+    let title: String
+    let subtitle: String
+    let content: Content
+
+    init(
+        title: String,
+        subtitle: String,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.content = content()
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.title2.weight(.semibold))
+                    Text(subtitle)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+
+                content
+            }
+            .padding(24)
+        }
+    }
+}
+
+private struct SettingsCard<Content: View>: View {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            )
     }
 }

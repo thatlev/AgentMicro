@@ -1,66 +1,88 @@
 import SwiftUI
 
+/// The menu-bar surface is deliberately a glanceable health check, not a
+/// second settings window. The three dots are the same source of truth as the
+/// full Setup tab: iPhone, Mac bridge, and ChatGPT.
 struct MenuPopoverView: View {
     @ObservedObject var model: AppModel
     let onOpenSettings: () -> Void
-    let onOpenOnboarding: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
-            header
+            statusSummary
+                .padding(16)
 
-            Divider()
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    summary
-                    connection
-                    details
-                    actions
-                    preferences
-                }
-                .padding(14)
+            if showsIntegrationAction {
+                Divider()
+                integrationAction
+                    .padding(14)
             }
 
             Divider()
-            footer
+
+            VStack(spacing: 2) {
+                if model.overallState != .healthy {
+                    menuRow(
+                        model.isBusy ? "Checking…" : "Check connection",
+                        systemImage: "arrow.clockwise",
+                        disabled: model.isBusy
+                    ) {
+                        model.reconnect()
+                    }
+                }
+
+                menuRow("Settings…", systemImage: "gearshape") {
+                    onOpenSettings()
+                }
+                .keyboardShortcut(",", modifiers: .command)
+
+                menuRow(
+                    model.isPaused ? "Resume bridge" : "Pause bridge",
+                    systemImage: model.isPaused ? "play.fill" : "pause.fill",
+                    disabled: model.isBusy
+                ) {
+                    model.togglePause()
+                }
+            }
+            .padding(8)
+
+            Divider()
+
+            menuRow("Quit Codex Micro", systemImage: "xmark.square", disabled: model.isBusy) {
+                model.quit()
+            }
+            .keyboardShortcut("q", modifiers: .command)
+            .padding(8)
         }
-        .frame(width: 360)
-        .frame(maxHeight: 650)
+        .frame(width: 310)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
-    private var header: some View {
-        HStack(spacing: 10) {
-            MicroGlyphView(size: 19)
+    private var statusSummary: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                MicroGlyphView(size: 19)
 
-            VStack(alignment: .leading, spacing: 1) {
                 Text("Codex Micro")
                     .font(.system(size: 13, weight: .semibold))
-                Text("Mac companion")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                if model.isBusy {
+                    ProgressView()
+                        .controlSize(.small)
+                        .accessibilityLabel("Codex Micro is working")
+                } else {
+                    StatusPill(text: statusLabel, tone: overallTone)
+                }
             }
 
-            Spacer()
-
-            StatusPill(text: statusLabel, tone: overallTone)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
-    }
-
-    private var summary: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: overallTone.systemImage)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(overallTone.color)
-                .padding(.top, 1)
-                .accessibilityHidden(true)
+            ConnectionRail(stages: connectionStages)
+                .padding(.horizontal, -4)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(model.headline)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.callout.weight(.semibold))
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text(model.detail)
@@ -68,196 +90,92 @@ struct MenuPopoverView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-
-            Spacer(minLength: 0)
-
-            if model.isBusy {
-                ProgressView()
-                    .controlSize(.small)
-                    .accessibilityLabel("Codex Micro is working")
-            }
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    private var connection: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            SectionLabel(title: "Connection")
-
-            QuietCard {
-                ConnectionRail(stages: connectionStages)
-            }
+            .accessibilityElement(children: .combine)
         }
     }
 
-    private var details: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            SectionLabel(title: "Status")
-
-            QuietCard {
-                VStack(spacing: 9) {
-                    StatusRow(
-                        icon: "iphone",
-                        title: "iPhone",
-                        value: model.phoneStatus,
-                        tone: phoneTone
-                    )
-                    StatusRow(
-                        icon: "bubble.left.and.bubble.right",
-                        title: "ChatGPT",
-                        value: model.chatGPTStatus,
-                        tone: chatGPTTone
-                    )
-                    StatusRow(
-                        icon: "wrench.and.screwdriver",
-                        title: "Integration",
-                        value: model.patchStatusText,
-                        tone: patchTone
-                    )
-                    StatusRow(
-                        icon: "arrow.left.arrow.right",
-                        title: "Last round trip",
-                        value: model.lastRoundTripText
-                    )
+    private var integrationAction: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(integrationActionTitle)
+                        .font(.callout.weight(.semibold))
+                    Text(integrationActionDetail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-            }
-        }
-    }
-
-    private var actions: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            SectionLabel(title: "Actions")
-
-            HStack(spacing: 8) {
-                ActionButton(
-                    title: "Reconnect",
-                    systemImage: "arrow.clockwise",
-                    help: "Recheck the iPhone, bridge, and ChatGPT connection.",
-                    isDisabled: model.isBusy
-                ) {
-                    model.reconnect()
-                }
-
-                ActionButton(
-                    title: "Open ChatGPT",
-                    systemImage: "arrow.up.forward.app",
-                    help: "Open ChatGPT without changing the current connection.",
-                    isDisabled: model.isBusy
-                ) {
-                    model.openChatGPT()
-                }
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(StatusTone.actionRequired.color)
             }
 
             PatchActionButtons(model: model, compact: true)
-
-            HStack(spacing: 8) {
-                ActionButton(
-                    title: "Copy diagnostics",
-                    systemImage: "doc.on.doc",
-                    help: "Copy redacted diagnostic information to the clipboard.",
-                    isDisabled: model.isBusy
-                ) {
-                    model.copyDiagnostics()
-                }
-
-                ActionButton(
-                    title: "Open logs",
-                    systemImage: "doc.text.magnifyingglass",
-                    help: "Reveal Codex Micro's local logs.",
-                    isDisabled: model.isBusy
-                ) {
-                    model.openLogs()
-                }
-            }
         }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(StatusTone.actionRequired.color.opacity(0.09))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(StatusTone.actionRequired.color.opacity(0.22), lineWidth: 1)
+        )
     }
 
-    private var preferences: some View {
-        QuietCard {
-            VStack(spacing: 10) {
-                Toggle(
-                    "Launch at Login",
-                    isOn: Binding(
-                        get: { model.launchAtLogin },
-                        set: { model.setLaunchAtLogin($0) }
-                    )
-                )
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .help("Keep Codex Micro available after you sign in to this Mac.")
-
-                Divider()
-
-                Button {
-                    model.togglePause()
-                } label: {
-                    Label(
-                        model.isPaused ? "Resume bridge" : "Pause bridge",
-                        systemImage: model.isPaused ? "play.fill" : "pause.fill"
-                    )
-                    .font(.caption.weight(.medium))
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(model.isPaused ? Color.accentColor : Color.secondary)
-                .disabled(model.isBusy)
-                .help(model.isPaused ? "Resume connection handling." : "Temporarily stop connection handling.")
-            }
+    private func menuRow(
+        _ title: String,
+        systemImage: String,
+        disabled: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.callout)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .padding(.horizontal, 8)
+                .frame(height: 32)
         }
+        .buttonStyle(.plain)
+        .disabled(disabled)
     }
 
-    private var footer: some View {
-        HStack(spacing: 14) {
-            Button("Setup Guide", action: onOpenOnboarding)
-                .buttonStyle(.plain)
-                .help("Open the Codex Micro setup guide.")
+    private var showsIntegrationAction: Bool {
+        let value = model.patchStatusText.lowercased()
+        return value.contains("required")
+            || value.contains("update")
+            || value.contains("unsupported")
+    }
 
-            Button("Settings…", action: onOpenSettings)
-                .buttonStyle(.plain)
-                .keyboardShortcut(",", modifiers: .command)
-                .help("Open Codex Micro settings.")
+    private var integrationActionTitle: String {
+        model.integrationNeedsUpdate ? "Update the ChatGPT integration" : "Enable ChatGPT integration"
+    }
 
-            Spacer()
-
-            Button("Quit", action: model.quit)
-                .buttonStyle(.plain)
-                .keyboardShortcut("q", modifiers: .command)
-                .disabled(model.isBusy)
-                .help("Quit Codex Micro.")
+    private var integrationActionDetail: String {
+        if model.integrationNeedsUpdate {
+            return "Restore ChatGPT first, then choose Patch ChatGPT. This is normally needed only after ChatGPT or Codex Micro updates."
         }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        return "Patch ChatGPT once to enable the complete iPhone route."
     }
 
     private var overallTone: StatusTone {
         switch model.overallState {
-        case .healthy:
-            return .healthy
-        case .connecting:
-            return .connecting
-        case .actionRequired:
-            return .actionRequired
-        case .failed:
-            return .failed
-        case .idle:
-            return .idle
+        case .healthy: return .healthy
+        case .connecting: return .connecting
+        case .actionRequired: return .actionRequired
+        case .failed: return .failed
+        case .idle: return .idle
         }
     }
 
     private var statusLabel: String {
         switch model.overallState {
-        case .healthy:
-            return "Verified"
-        case .connecting:
-            return "Connecting"
-        case .actionRequired:
-            return "Action needed"
-        case .failed:
-            return "Failed"
-        case .idle:
-            return model.isPaused ? "Paused" : "Idle"
+        case .healthy: return "Connected"
+        case .connecting: return "Connecting"
+        case .actionRequired: return "Action needed"
+        case .failed: return "Failed"
+        case .idle: return model.isPaused ? "Paused" : "Idle"
         }
     }
 
@@ -269,27 +187,23 @@ struct MenuPopoverView: View {
         StatusTone.inferred(from: model.chatGPTStatus, fallback: overallTone)
     }
 
-    private var patchTone: StatusTone {
-        StatusTone.inferred(from: model.patchStatusText, fallback: overallTone)
-    }
-
     private var connectionStages: [ConnectionRail.Stage] {
         [
-            ConnectionRail.Stage(
+            .init(
                 id: "phone",
                 title: "iPhone",
                 detail: model.phoneStatus,
                 icon: "iphone",
                 tone: phoneTone
             ),
-            ConnectionRail.Stage(
+            .init(
                 id: "bridge",
                 title: "Mac",
-                detail: bridgeDetail,
+                detail: statusLabel,
                 icon: "macbook",
                 tone: overallTone
             ),
-            ConnectionRail.Stage(
+            .init(
                 id: "chatgpt",
                 title: "ChatGPT",
                 detail: model.chatGPTStatus,
@@ -297,20 +211,5 @@ struct MenuPopoverView: View {
                 tone: chatGPTTone
             ),
         ]
-    }
-
-    private var bridgeDetail: String {
-        switch model.overallState {
-        case .healthy:
-            return "Verified"
-        case .connecting:
-            return "Checking"
-        case .actionRequired:
-            return "Needs attention"
-        case .failed:
-            return "Route failed"
-        case .idle:
-            return model.isPaused ? "Paused" : "Waiting"
-        }
     }
 }

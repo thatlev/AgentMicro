@@ -10,7 +10,6 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     private let statusDot = StatusDotView()
     private var subscriptions = Set<AnyCancellable>()
     private var settingsWindowController: NSWindowController?
-    private var onboardingWindowController: NSWindowController?
 
     init(model: AppModel) {
         self.model = model
@@ -25,7 +24,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
 
     func showOnboardingIfNeeded() {
         guard model.showOnboarding else { return }
-        showOnboarding()
+        showSettings()
     }
 
     private func configureStatusItem() {
@@ -55,12 +54,11 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         popover.behavior = .transient
         popover.animates = true
         popover.delegate = self
-        popover.contentSize = NSSize(width: 360, height: 630)
+        popover.contentSize = NSSize(width: 310, height: 330)
         popover.contentViewController = NSHostingController(
             rootView: MenuPopoverView(
                 model: model,
-                onOpenSettings: { [weak self] in self?.showSettings() },
-                onOpenOnboarding: { [weak self] in self?.showOnboarding() }
+                onOpenSettings: { [weak self] in self?.showSettings() }
             )
         )
     }
@@ -96,8 +94,6 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
                     DispatchQueue.main.async { [weak self] in
                         self?.showOnboardingIfNeeded()
                     }
-                } else {
-                    self.onboardingWindowController?.close()
                 }
             }
             .store(in: &subscriptions)
@@ -107,6 +103,14 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         guard let button = statusItem.button else { return }
 
         let tone = overallTone
+        let patchValue = model.patchStatusText.lowercased()
+        let showsIntegrationAction = patchValue.contains("required")
+            || patchValue.contains("update")
+            || patchValue.contains("unsupported")
+        popover.contentSize = NSSize(
+            width: 310,
+            height: showsIntegrationAction ? 450 : (tone == .healthy ? 300 : 345)
+        )
         statusDot.isHidden = tone == .healthy
         statusDot.color = tone.nsColor
 
@@ -140,16 +144,13 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
 
         if settingsWindowController == nil {
             let hostingController = NSHostingController(
-                rootView: SettingsView(
-                    model: model,
-                    onOpenOnboarding: { [weak self] in self?.showOnboarding() }
-                )
+                rootView: SettingsView(model: model)
             )
             let window = NSWindow(contentViewController: hostingController)
             window.title = "Codex Micro Settings"
             window.identifier = NSUserInterfaceItemIdentifier("CodexMicroSettings")
             window.styleMask = [.titled, .closable, .miniaturizable]
-            window.setContentSize(NSSize(width: 470, height: 570))
+            window.setContentSize(NSSize(width: 620, height: 480))
             window.isReleasedWhenClosed = false
             window.center()
             window.delegate = self
@@ -159,29 +160,6 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
         settingsWindowController?.showWindow(nil)
         settingsWindowController?.window?.makeKeyAndOrderFront(nil)
-    }
-
-    private func showOnboarding() {
-        popover.performClose(nil)
-
-        if onboardingWindowController == nil {
-            let hostingController = NSHostingController(
-                rootView: OnboardingView(model: model)
-            )
-            let window = NSWindow(contentViewController: hostingController)
-            window.title = "Set Up Codex Micro"
-            window.identifier = NSUserInterfaceItemIdentifier("CodexMicroOnboarding")
-            window.styleMask = [.titled, .closable]
-            window.setContentSize(NSSize(width: 530, height: 590))
-            window.isReleasedWhenClosed = false
-            window.center()
-            window.delegate = self
-            onboardingWindowController = NSWindowController(window: window)
-        }
-
-        NSApp.activate(ignoringOtherApps: true)
-        onboardingWindowController?.showWindow(nil)
-        onboardingWindowController?.window?.makeKeyAndOrderFront(nil)
     }
 
     private var overallTone: StatusTone {
