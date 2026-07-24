@@ -331,11 +331,11 @@ bridge adds private channels 3–5:
 |---:|---|---|
 | `1` | device → host | Debug log text |
 | `2` | both | JSON-RPC-like messages |
-| `3` | bridge → phone | **SidePulse-only** settings sync, not real device protocol (see below) |
-| `4` | phone/emu → shim | **SidePulse-only** host-action control channel (see below) |
-| `5` | phone → bridge | **SidePulse-only** bridge control: page routing, refresh, VS Code new/pin/dictation |
+| `3` | bridge → phone | **CodexMicro-only** settings sync, not real device protocol (see below) |
+| `4` | phone/emu → shim | **CodexMicro-only** host-action control channel (see below) |
+| `5` | phone → bridge | **CodexMicro-only** bridge control: page routing, refresh, VS Code new/pin/dictation |
 
-**[LOCAL TEST — SidePulse addition]** Channel `3` is not part of the Codex Micro
+**[LOCAL TEST — CodexMicro addition]** Channel `3` is not part of the Codex Micro
 wire protocol. `tools/CodexMicroBridge` uses it to relay ChatGPT's key-binding
 layout and durable lighting-brightness setting from `~/.codex/config.toml` to
 the CodexMicroRemote iPhone app, so its command-key legends and read-only
@@ -346,7 +346,7 @@ never written toward the ChatGPT shim, so the host never sees it.
 In auto mode the same channel also carries `vscode-state` snapshots (targets,
 direct v2 pins, selected target, extension connection state).
 
-**[LOCAL TEST — SidePulse addition]** Channel `4` is likewise not part of the
+**[LOCAL TEST — CodexMicro addition]** Channel `4` is likewise not part of the
 Codex Micro wire protocol. It is a control channel flowing phone/emulator →
 `codex-hid-shim.js` for host-side actions the device protocol has no command
 for. The composer has no clear command in any ChatGPT build examined (the
@@ -357,7 +357,7 @@ on channel 4; the shim runs Electron's `webContents.selectAll()` +
 `delete()` on the focused window and swallows the frame (it is never forwarded
 to node-hid). Framed like channels 2/3 (`[6][4][len][payload…]`).
 
-**[LOCAL TEST — SidePulse addition]** Channel `5` terminates in
+**[LOCAL TEST — CodexMicro addition]** Channel `5` terminates in
 `CodexMicroBridge`; neither ChatGPT nor the shim receives it. `setControlTarget`
 switches auto routing between ChatGPT and VS Code. `vscodeNew`,
 `vscodeTogglePin`, `vscodeInsert`, and target-bound `vscodeVoice` drive the companion extension, while
@@ -546,8 +546,9 @@ helper over a Unix socket instead of to an OS HID device.
    refreshes `ElectronAsarIntegrity` (SHA256 of the asar header JSON), and re-signs ad-hoc.
 2. The shim impersonates the watcher (`findCodexMicroInterfaces`, `watch`) and `node-hid`
    (`HIDAsync.open`, 64-byte framed reports) and relays bytes to
-   `/tmp/codexbridge.sock`.
-3. `tools/CodexMicroBridge` serves that socket. Default mode relays the iPhone bridge GATT
+   `$TMPDIR/CodexMicro/codexbridge.sock`. The menu app temporarily exposes the
+   former `/tmp/codexbridge.sock` path as a migration alias for older patches.
+3. The Codex Micro menu app serves that socket. Its embedded bridge relays the iPhone bridge GATT
    service; `--emulate` is a standalone virtual Codex Micro (answers `device.status`,
    lighting acks; stdin injects key/dial/joystick events). No root needed in either mode.
 
@@ -557,8 +558,8 @@ consumes injected `v.oai.hid`/`v.oai.rad` events; hot-plug and reconnect behave 
 hardware. Caveats: ad-hoc re-signing requires stripping the restricted team entitlements
 (keychain access is lost → one re-login; the app keeps an `embedded.provisionprofile` that
 becomes inert), macOS re-prompts TCC permissions for the re-signed app, and any ChatGPT
-update reverts the patch — re-run the script (`--restore` returns the pristine
-OpenAI-signed build from `~/.codexbridge/backup/<version>/`).
+update reverts the patch. Fresh menu-app patches retain a full, versioned
+backup under `~/Library/Application Support/CodexMicro/Backups/`.
 
 ### External BLE-HID hardware
 

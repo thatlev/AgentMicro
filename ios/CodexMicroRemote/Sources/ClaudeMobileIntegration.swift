@@ -449,7 +449,7 @@ struct ClaudeMobileOpenReceipt: Equatable, Sendable {
 
 @MainActor
 final class ClaudeMobileIntegration: ObservableObject {
-    nonisolated static let defaultPinsStorageKey = "com.sidepulse.codexmicroremote.claudeMobile.sessionPins.v1"
+    nonisolated static let defaultPinsStorageKey = "io.github.thislev.codexmicroremote.claudeMobile.sessionPins.v1"
 
     @Published private(set) var pins: ClaudeMobilePinSlots
     @Published private(set) var recoveryNotice: String?

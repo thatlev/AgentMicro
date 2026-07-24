@@ -14,7 +14,7 @@ into real editor actions:
 - **use Claude's native dictation** for a concrete Claude editor chat when available
 - **insert or auto-send iPhone dictation** for Codex, Kimi, terminals, and reliable auto-send
 - **pin/unpin** the selected target to the first free agent key
-- **decorate pinned file tabs** with live SidePulse status colors
+- **decorate pinned file tabs** with live CodexMicro status colors
 - **show VS Code's native pin glyph** on pinned Claude/agent editor tabs
 
 It also streams the list of pinnable *targets* (each concrete terminal instance

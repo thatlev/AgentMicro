@@ -167,7 +167,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.7;
-				PRODUCT_BUNDLE_IDENTIFIER = com.sidepulse.codexmicroremote;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.thislev.codexmicroremote;
 				SDKROOT = iphoneos;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -307,7 +307,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.7;
-				PRODUCT_BUNDLE_IDENTIFIER = com.sidepulse.codexmicroremote;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.thislev.codexmicroremote;
 				SDKROOT = iphoneos;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				TARGETED_DEVICE_FAMILY = "1,2";

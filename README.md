@@ -1,15 +1,22 @@
-# SidePulse — Codex Micro iOS emulator
+# Codex Micro
 
-Makes an iPhone (or the Mac itself) act as an OpenAI **Codex Micro** BLE macropad
-for the ChatGPT / Codex desktop app. The ChatGPT app is patched to detect the
-device through a local socket bridge instead of a real USB HID device.
+Codex Micro turns an iPhone into a BLE control surface for the Codex Micro
+interface in the ChatGPT desktop app. A native macOS menu-bar companion owns
+the Bluetooth bridge, connection truth, reversible ChatGPT integration, logs,
+launch-at-login registration, and first-run setup.
 
 Architecture:
 
 ```
-ChatGPT (patched shim) ⟷ /tmp/codexbridge.sock ⟷ codexbridge helper ⟷ iPhone app (BLE)
-                                                                     └⟶ --emulate (built-in virtual device)
+ChatGPT (patched shim)
+        ⟷ $TMPDIR/CodexMicro/codexbridge.sock
+        ⟷ Codex Micro menu-bar app
+        ⟷ iPhone app (BLE)
 ```
+
+The companion temporarily provides `/tmp/codexbridge.sock` as a compatibility
+alias for ChatGPT installations patched by the previous invisible helper.
+Fresh patches use the private per-user socket directly.
 
 ## Visible iPhone surfaces
 
@@ -25,8 +32,8 @@ The iPhone app shows two swipe pages:
   composer after verifying that macOS reports an editable text field.
 
 The first Claude microphone or clear action asks for macOS **Accessibility**
-permission for `codexbridge`. Enable it under **System Settings → Privacy &
-Security → Accessibility**; the helper never modifies the Claude app.
+permission for **Codex Micro**. Enable it under **System Settings → Privacy &
+Security → Accessibility**; the companion never modifies the Claude app.
 
 The VS Code and T3 implementations remain in the app and helper, including
 their persisted setup, but their pages are currently hidden.
@@ -40,7 +47,7 @@ key events over a socket and runs public editor commands.
 
 ```
 iPhone (BLE) ⟷ codexbridge (auto) ⟷ $TMPDIR/codexbridge-vscode.sock ⟷ Codex Micro VSCode extension
-             └ agent-key LEDs ← SidePulse status.json ← Claude/Codex/Kimi hooks
+             └ agent-key LEDs ← Codex Micro status.json ← Claude/Codex/Kimi hooks
 ```
 
 Setup and controls: **[docs/claude-vscode-setup.md](docs/claude-vscode-setup.md)**.
@@ -49,55 +56,37 @@ Quick start for development/testing: install
 `./tools/CodexMicroBridge/codexbridge`. The VS Code page can be restored to the
 pager without rebuilding its underlying integration.
 
-## Commands
+## macOS menu-bar app
 
-Run all three from the repo root (`/Users/lev/Documents/VibeCoding/AI tools/CodexMicro`).
-
-### 1. Patch (remake) the ChatGPT app
-
-Injects the bridge shim into `/Applications/ChatGPT.app`, eagerly starts the
-Codex Micro service, and enables the renderer event bridge that interprets
-dial/key input. It is idempotent — **re-run this after every ChatGPT
-auto-update**, because updates replace the app bundle and wipe the patch
-(symptoms: the phone says Mac connected but keys do nothing, onboarding
-reappears, or the device stops being detected).
+The source of truth is `macos/CodexMicro/project.yml`. On an Apple-silicon Mac
+with Xcode, XcodeGen, and npm installed:
 
 ```bash
-./tools/patch-chatgpt.sh
+./scripts/build-macos.sh
+./scripts/package-dmg.sh
 ```
 
-If macOS reports `Operation not permitted`, enable **Terminal** under System
-Settings → Privacy & Security → App Management, then run the patch again.
-App Management is the macOS permission that allows one app to update another
-installed app bundle.
+The outputs are `dist/Codex Micro.app` and
+`dist/Codex-Micro-1.0.0-arm64.dmg`. The DMG is ad-hoc signed for local testing
+unless `MACOS_SIGN_IDENTITY` and, optionally, `MACOS_NOTARY_PROFILE` are set.
+See [macos/CodexMicro/README.md](macos/CodexMicro/README.md).
 
-To revert to the pristine OpenAI-signed app:
+On first launch the app disables the previous invisible KeepAlive launch item,
+retains its plist under `~/Library/Application Support/CodexMicro/Legacy/`,
+and enables Launch at Login. It does not delete the previous helper app.
 
-```bash
-./tools/patch-chatgpt.sh --restore
-```
+Patching and restoring ChatGPT are explicit, confirmed actions in the menu.
+Codex Micro asks ChatGPT to quit normally and aborts without replacement if it
+does not close; it never force-quits ChatGPT.
 
-### 2. Run the helper on the Mac for the iPhone app
-
-Bridges the CodexMicroRemote iPhone app to ChatGPT/Codex and Claude Desktop
-over BLE. Leave it running, then open the app and swipe between its two control
-pages. The selected page determines which isolated desktop integration receives
-the keys.
+The command-line bridge and emulator remain available for development:
 
 ```bash
 ./tools/CodexMicroBridge/codexbridge
-```
-
-### 3. Run the emulator on the Mac instead of the iPhone
-
-Presents a built-in virtual Codex Micro straight to ChatGPT — no iPhone needed.
-
-```bash
 ./tools/CodexMicroBridge/codexbridge --emulate
 ```
 
-Note: run only one of command 2 or 3 at a time (both use the same socket).
-Reopen ChatGPT after the helper/emulator is running.
+Run only one menu app, command-line bridge, or emulator at a time.
 
 ## Connection status and clean reconnect
 
@@ -109,16 +98,17 @@ The iPhone's Codex page now separates the connection stages:
   socket client is present.
 - **Checking ChatGPT** — ChatGPT sent a real device request and the helper is waiting
   for the iPhone's reply.
-- **Fully connected** — shown in green only after a successful, matched
-  ChatGPT → helper → iPhone → helper → ChatGPT RPC round trip.
+- **Fully connected** — shown without an attention dot only after a recent,
+  successful, matched ChatGPT → companion → iPhone → companion → ChatGPT RPC
+  round trip. The companion keeps rechecking this route.
 - **Recovering** or **Connection error** — the end-to-end path is not usable.
 
 Codex controls are intentionally disabled until the status is **Fully connected**.
-For a clean reconnect, keep the iPhone app open in the foreground, fully quit
-ChatGPT with Command-Q, then reopen ChatGPT. The helper starts automatically.
-The badge should progress to **Fully connected** within a few seconds. If it
-stops at **Waiting for ChatGPT** after a ChatGPT update, re-run
-`./tools/patch-chatgpt.sh`, then quit and reopen ChatGPT once more.
+For a clean reconnect, open Codex Micro on the iPhone, choose **Reconnect** in
+the Mac menu, and open ChatGPT. If the Integration row says **Patch required**,
+use **Patch ChatGPT**, allow App Management if macOS asks, and let the app reopen
+ChatGPT. The status should progress through yellow checking states and become
+**Fully connected** only after the fresh round trip succeeds.
 
 ## Key binding sync
 

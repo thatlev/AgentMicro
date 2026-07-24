@@ -7,7 +7,7 @@
     <key>CFBundleExecutable</key>
     <string>codexbridge</string>
     <key>CFBundleIdentifier</key>
-    <string>com.sidepulse.codexbridge</string>
+    <string>io.github.thislev.codexbridge</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>

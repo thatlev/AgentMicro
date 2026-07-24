@@ -3,7 +3,7 @@
   "displayName": "Codex Micro — VSCode bridge",
   "description": "Lets the Codex Micro macropad (via codexbridge --target vscode) drive editor tabs and agent terminals: focus a pinned tab, approve/reject Claude diffs, and send keys to Codex/Kimi CLIs.",
   "version": "0.6.0",
-  "publisher": "sidepulse",
+  "publisher": "codexmicro",
   "engines": { "vscode": "^1.90.0" },
   "categories": ["Other"],
   "activationEvents": ["onStartupFinished"],
@@ -69,7 +69,7 @@
         "codexMicro.decorateTabs": {
           "type": "boolean",
           "default": true,
-          "description": "Color pinned file-editor tab labels from SidePulse agent status. Selected tabs keep the normal VS Code selected color."
+          "description": "Color pinned file-editor tab labels from CodexMicro agent status. Selected tabs keep the normal VS Code selected color."
         }
       }
     }
