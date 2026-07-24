@@ -46,6 +46,10 @@ import Foundation
 setvbuf(stdout, nil, _IONBF, 0) // unbuffered prints so nohup logs stay live
 signal(SIGPIPE, SIG_IGN)        // writing to a vanished shim client must not kill us
 
+/// The native menu-bar app installs a rotating file sink here. The command-line
+/// helper leaves it nil and keeps its existing unbuffered stdout behavior.
+var bridgeLogObserver: ((String) -> Void)?
+
 /// Brings a desktop editor app to the front (macOS app activation) by bundle
 /// id. Used when the user double-taps an agent key: the tab is focused *inside*
 /// the editor and the whole app is raised above other windows. Best-effort and
@@ -59,7 +63,104 @@ enum AppActivator {
                 log("raise: no running app for bundle id \(bundleIdentifier)")
                 return
             }
-            app.activate(options: [.activateAllWindows])
+            app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+        }
+    }
+}
+
+enum T3DesktopCommand {
+    private static let bundleIdentifier = "com.t3tools.t3code"
+
+    static func sendEffort(increasing: Bool) {
+        var components = URLComponents()
+        components.scheme = "t3code"
+        components.host = "codex-micro"
+        components.path = "/command"
+        components.queryItems = [
+            URLQueryItem(name: "kind", value: "effort"),
+            URLQueryItem(name: "direction", value: increasing ? "1" : "-1"),
+        ]
+        open(components.url)
+    }
+
+    static func sendAction(_ action: String) {
+        var components = URLComponents()
+        components.scheme = "t3code"
+        components.host = "codex-micro"
+        components.path = "/command"
+        components.queryItems = [
+            URLQueryItem(name: "kind", value: "action"),
+            URLQueryItem(name: "action", value: action),
+        ]
+        open(components.url)
+    }
+
+    static func focus(targetID: String?) {
+        var components = URLComponents()
+        components.scheme = "t3code"
+        components.host = "codex-micro"
+        components.path = "/command"
+        var queryItems = [URLQueryItem(name: "kind", value: "focus")]
+        if let targetID, let target = T3TargetID(rawValue: targetID) {
+            queryItems.append(URLQueryItem(name: "environmentId", value: target.environmentID))
+            queryItems.append(URLQueryItem(name: "threadId", value: target.threadID))
+        }
+        components.queryItems = queryItems
+        open(components.url)
+    }
+
+    private static func open(_ url: URL?) {
+        AppActivator.activate(bundleIdentifier: bundleIdentifier)
+        guard let url else { return }
+        DispatchQueue.main.async {
+            NSWorkspace.shared.open(url)
+        }
+    }
+}
+
+final class MacOSDictationController {
+    private let queue = DispatchQueue(label: "io.github.thislev.codexmicro.dictation")
+    private var desiredActive = false
+    var onStateChange: (Bool, String?) -> Void = { _, _ in }
+
+    func setActive(_ active: Bool) {
+        queue.async {
+            guard self.desiredActive != active else { return }
+            let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+            guard AXIsProcessTrustedWithOptions([promptKey: true] as CFDictionary) else {
+                self.onStateChange(
+                    false,
+                    "Allow Codex Micro in System Settings › Privacy & Security › Accessibility, then press the mic again."
+                )
+                return
+            }
+            self.desiredActive = active
+            let script = """
+            tell application "T3 Code (Alpha)" to activate
+            tell application "System Events"
+                tell process "T3 Code (Alpha)"
+                    set frontmost to true
+                    tell menu "Edit" of menu bar item "Edit" of menu bar 1
+                        set dictationItems to every menu item whose name contains "Dictation"
+                        if (count of dictationItems) is 0 then error "T3 Code has no Dictation menu item"
+                        click item 1 of dictationItems
+                    end tell
+                end tell
+            end tell
+            """
+            var error: NSDictionary?
+            NSAppleScript(source: script)?.executeAndReturnError(&error)
+            if let error {
+                self.desiredActive.toggle()
+                log("t3: macOS dictation failed — \(error)")
+                self.onStateChange(
+                    self.desiredActive,
+                    "macOS Dictation could not be toggled. Confirm Dictation is enabled and Codex Micro has Accessibility access."
+                )
+            } else {
+                log("t3: macOS dictation \(active ? "started" : "stopped")")
+                self.onStateChange(active, nil)
+            }
         }
     }
 }
@@ -73,12 +174,48 @@ let tagPresence: UInt8 = 0x50 // 'P'
 let tagInput: UInt8 = 0x49    // 'I'
 let tagOutput: UInt8 = 0x4F   // 'O'
 
+func defaultCodexBridgeSocketPath() -> String {
+    let directory = (NSTemporaryDirectory() as NSString)
+        .appendingPathComponent("CodexMicro")
+    try? FileManager.default.createDirectory(
+        atPath: directory,
+        withIntermediateDirectories: true,
+        attributes: [.posixPermissions: 0o700]
+    )
+    return (directory as NSString).appendingPathComponent("codexbridge.sock")
+}
+
 enum EndToEndConnectionState: String {
     case transportConnected = "transport-connected"
     case waitingForChatGPT = "waiting-for-chatgpt"
     case handshaking
     case operational
     case recovering
+}
+
+enum BridgeBluetoothState: String {
+    case unknown
+    case unavailable
+    case denied
+    case poweredOff
+    case scanning
+    case connecting
+    case linked
+}
+
+struct CodexMicroBridgeStatus: Equatable {
+    var bluetooth: BridgeBluetoothState = .unknown
+    var phoneName: String?
+    var phoneLinked = false
+    var reportStreamReady = false
+    var chatGPTLinked = false
+    var endToEnd: EndToEndConnectionState = .recovering
+    var detail = "Starting Codex Micro"
+    var lastSuccessfulRoundTrip: Date?
+
+    var isOperational: Bool {
+        phoneLinked && reportStreamReady && chatGPTLinked && endToEnd == .operational
+    }
 }
 
 /// Duplicate CoreBluetooth advertisements are not evidence that an existing
@@ -98,6 +235,7 @@ func shouldRefreshConnectedPeripheral(
 
 func log(_ message: String) {
     print("[bridge] \(message)")
+    bridgeLogObserver?(message)
 }
 
 // MARK: - Unix socket server speaking to the in-app shim
@@ -118,6 +256,15 @@ final class SocketServer {
     }
 
     func start() {
+        guard serverFD < 0 else { return }
+        let directory = (path as NSString).deletingLastPathComponent
+        if !directory.isEmpty {
+            try? FileManager.default.createDirectory(
+                atPath: directory,
+                withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700]
+            )
+        }
         unlink(path)
         serverFD = socket(AF_UNIX, SOCK_STREAM, 0)
         guard serverFD >= 0 else { log("FATAL: socket() failed: \(errnoString())"); exit(1) }
@@ -151,6 +298,28 @@ final class SocketServer {
                 }
                 self.addClient(client)
             }
+        }
+    }
+
+    func stop() {
+        lock.lock()
+        let connectedClients = Array(clients)
+        clients.removeAll()
+        let descriptor = serverFD
+        serverFD = -1
+        present = false
+        lock.unlock()
+
+        for client in connectedClients {
+            shutdown(client, SHUT_RDWR)
+        }
+        if descriptor >= 0 {
+            shutdown(descriptor, SHUT_RDWR)
+            close(descriptor)
+        }
+        unlink(path)
+        DispatchQueue.main.async { [weak self] in
+            self?.onClientCountChange(0)
         }
     }
 
@@ -488,7 +657,9 @@ final class LayoutWatcher {
 final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     private let server: SocketServer
     private var central: CBCentralManager!
+    private var shouldRun = false
     private var phone: CBPeripheral?
+    private var phoneConnected = false
     private var outputChar: CBCharacteristic?
     private var pendingWrites: [Data] = []
     private var isSubscribed = false
@@ -510,7 +681,18 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     private var shimConnected = false
     private var endToEndState: EndToEndConnectionState = .recovering
     private var endToEndDetail = "Waiting for the Mac helper"
+    private var bluetoothState: BridgeBluetoothState = .unknown
+    private var lastSuccessfulRoundTrip: Date?
     private var healthCheckTimeoutWorkItem: DispatchWorkItem?
+    private var healthProbeWorkItem: DispatchWorkItem?
+    private let healthProbeInterval: TimeInterval = 30
+    private var phoneLivenessWorkItem: DispatchWorkItem?
+    /// The foreground iPhone app sends an idempotent refresh every eight
+    /// seconds. Requiring one within three heartbeat windows prevents a cached
+    /// CoreBluetooth subscription from keeping the menu status healthy after
+    /// the mobile app has been closed or suspended.
+    private let phoneLivenessTimeout: TimeInterval = 26
+    private var lastPhoneActivityAt: Date?
     private var cachedAgentSlots: [[String: Any]]?
     private var cachedZones: [String: Any]?
     /// One-shot guard: a resync re-presents the virtual device, which must stay
@@ -528,6 +710,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     /// Called once the iPhone has subscribed to the report stream; used to
     /// push the current key binding layout to the freshly connected phone.
     var onSubscribed: () -> Void = {}
+    var onStatusChange: (CodexMicroBridgeStatus) -> Void = { _ in }
 
     /// When set (--target vscode), phone channel-2 RPC (v.oai.hid / v.oai.rad)
     /// is parsed here and routed to the VSCode controller instead of being
@@ -545,26 +728,89 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     }
 
     func start() {
-        central = CBCentralManager(delegate: self, queue: nil)
+        shouldRun = true
+        if central == nil {
+            central = CBCentralManager(delegate: self, queue: nil)
+        } else {
+            startScanning()
+            publishStatus()
+        }
+    }
+
+    func stop() {
+        shouldRun = false
+        healthCheckTimeoutWorkItem?.cancel()
+        healthCheckTimeoutWorkItem = nil
+        healthProbeWorkItem?.cancel()
+        healthProbeWorkItem = nil
+        phoneLivenessWorkItem?.cancel()
+        phoneLivenessWorkItem = nil
+        presenceDropWorkItem?.cancel()
+        presenceDropWorkItem = nil
+        central?.stopScan()
+        if let phone {
+            central?.cancelPeripheralConnection(phone)
+        }
+        outputChar = nil
+        phone = nil
+        phoneConnected = false
+        isSubscribed = false
+        subscribedAt = nil
+        lastPhoneActivityAt = nil
+        pendingWrites.removeAll()
+        server.setPresent(false)
+        bluetoothState = .unknown
+        setEndToEndState(.recovering, detail: "Bridge paused", force: true)
+    }
+
+    func reconnect() {
+        shouldRun = true
+        if let phone {
+            central?.cancelPeripheralConnection(phone)
+        }
+        reset()
+        publishStatus()
+    }
+
+    /// A cheap, non-disruptive recovery nudge used when the user opens the
+    /// menu. Healthy links are left untouched; an idle bridge resumes scanning.
+    func ensureConnected() {
+        guard shouldRun else {
+            start()
+            return
+        }
+        guard !isSubscribed, phone == nil else { return }
+        startScanning()
+        publishStatus()
     }
 
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         switch central.state {
         case .poweredOn:
+            bluetoothState = .scanning
             log("Bluetooth on — scanning for the Codex Micro Remote iPhone app")
             startScanning()
         case .unauthorized:
+            bluetoothState = .denied
             server.setPresent(false)
-            log("Bluetooth access denied. Allow it for your terminal in System Settings › Privacy & Security › Bluetooth, then rerun.")
+#if CODEX_MICRO_MENU_APP
+            log("Bluetooth access denied. Allow Codex Micro in System Settings › Privacy & Security › Bluetooth, then choose Reconnect.")
+#else
+            log("Bluetooth access denied. Allow the bridge in System Settings › Privacy & Security › Bluetooth, then rerun.")
+#endif
         case .poweredOff:
+            bluetoothState = .poweredOff
             server.setPresent(false)
             log("Bluetooth is off — turn it on in System Settings")
         case .unsupported:
+            bluetoothState = .unavailable
             server.setPresent(false)
             log("this Mac does not support Bluetooth LE")
         default:
+            bluetoothState = .unknown
             break
         }
+        publishStatus()
     }
 
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral,
@@ -585,8 +831,11 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         }
         log("found \(peripheral.name ?? "iPhone") (RSSI \(RSSI)) — connecting")
         phone = peripheral
+        phoneConnected = false
+        bluetoothState = .connecting
         phoneAdvertisingSession = discoveredSession
         peripheral.delegate = self
+        publishStatus()
         if #available(macOS 14.0, *) {
             central.connect(peripheral, options: [CBConnectPeripheralOptionEnableAutoReconnect: true])
         } else {
@@ -602,18 +851,23 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        phoneConnected = true
+        bluetoothState = .linked
         log("connected — discovering bridge service")
+        publishStatus()
         peripheral.discoverServices([bridgeServiceUUID])
     }
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
         guard phone?.identifier == peripheral.identifier else { return }
+        phoneConnected = false
         log("connect failed: \(error?.localizedDescription ?? "unknown error") — rescanning")
         reset(preservePresence: presenceDropWorkItem != nil)
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         guard phone?.identifier == peripheral.identifier else { return }
+        phoneConnected = false
         log("iPhone disconnected\(error.map { ": \($0.localizedDescription)" } ?? "") — preserving virtual device while rescanning")
         reset(preservePresence: isSubscribed || presenceDropWorkItem != nil)
     }
@@ -622,6 +876,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral,
                         timestamp: CFAbsoluteTime, isReconnecting: Bool, error: Error?) {
         guard phone?.identifier == peripheral.identifier else { return }
+        phoneConnected = isReconnecting
         log("iPhone link interrupted\(error.map { ": \($0.localizedDescription)" } ?? "")"
             + (isReconnecting ? " — system auto-reconnect active" : " — rescanning"))
         if isReconnecting {
@@ -634,13 +889,16 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
             discardingBridgeControlFrame = false
             hostRPCBuffer.removeAll()
             deviceRPCBuffer.removeAll()
+            bluetoothState = .connecting
+            publishStatus()
         } else {
             reset(preservePresence: isSubscribed || presenceDropWorkItem != nil)
         }
     }
 
     private func startScanning() {
-        guard central.state == .poweredOn else { return }
+        guard shouldRun, central.state == .poweredOn else { return }
+        bluetoothState = .scanning
         central.scanForPeripherals(
             withServices: [bridgeServiceUUID],
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: true]
@@ -648,6 +906,10 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     }
 
     private func reset(preservePresence: Bool = false) {
+        healthProbeWorkItem?.cancel()
+        healthProbeWorkItem = nil
+        phoneLivenessWorkItem?.cancel()
+        phoneLivenessWorkItem = nil
         if preservePresence { schedulePresenceDrop() }
         else {
             presenceDropWorkItem?.cancel()
@@ -656,8 +918,10 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         }
         outputChar = nil
         phone = nil
+        phoneConnected = false
         isSubscribed = false
         subscribedAt = nil
+        lastPhoneActivityAt = nil
         phoneAdvertisingSession = nil
         pendingWrites.removeAll()
         bridgeControlBuffer.removeAll()
@@ -666,6 +930,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         deviceRPCBuffer.removeAll()
         central.stopScan()
         startScanning()
+        publishStatus()
     }
 
     private func schedulePresenceDrop() {
@@ -718,14 +983,19 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         presenceDropWorkItem = nil
         isSubscribed = true
         subscribedAt = Date()
+        notePhoneActivity()
+        phoneConnected = true
+        bluetoothState = .linked
         server.setPresent(true)
         beginEndToEndHandshake()
         onSubscribed()
+        publishStatus()
     }
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         guard characteristic.uuid == bridgeInputUUID, error == nil,
               let value = characteristic.value, !value.isEmpty else { return }
+        notePhoneActivity()
         if value.first == 2 { observeDeviceResponse(value) }
         if value.first == 5 {
             handleBridgeControl(value)
@@ -742,6 +1012,48 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         var report = Data([hidReportID])
         report.append(value)
         server.broadcastInput(report)
+    }
+
+    private func notePhoneActivity() {
+        lastPhoneActivityAt = Date()
+        schedulePhoneLivenessCheck()
+    }
+
+    private func schedulePhoneLivenessCheck() {
+        phoneLivenessWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.phoneLivenessWorkItem = nil
+            guard self.shouldRun, self.isSubscribed, let last = self.lastPhoneActivityAt else { return }
+            let age = Date().timeIntervalSince(last)
+            if age < self.phoneLivenessTimeout {
+                self.schedulePhoneLivenessCheck()
+                return
+            }
+
+            log("iPhone heartbeat expired — treating the mobile app as disconnected")
+            self.isSubscribed = false
+            self.phoneConnected = false
+            self.outputChar = nil
+            self.pendingWrites.removeAll()
+            self.server.setPresent(false)
+            self.bluetoothState = .connecting
+            self.setEndToEndState(
+                .recovering,
+                detail: "iPhone app stopped responding; waiting for it to reopen",
+                force: true
+            )
+            if let phone = self.phone {
+                self.central.cancelPeripheralConnection(phone)
+            } else {
+                self.reset()
+            }
+        }
+        phoneLivenessWorkItem = work
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + phoneLivenessTimeout,
+            execute: work
+        )
     }
 
     /// Accumulate device->host channel-2 fragments (newline-terminated JSON) and
@@ -763,7 +1075,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
 
     /// Host -> device RPC pushed to the phone as a notification (bare JSON, no
     /// newline, channel 2). Used by --target vscode to drive the agent-key LEDs
-    /// from SidePulse status without a ChatGPT host present.
+    /// from CodexMicro status without a ChatGPT host present.
     func sendHostRPC(_ obj: [String: Any]) {
         guard phone != nil, outputChar != nil,
               let json = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys]) else { return }
@@ -837,6 +1149,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
 
     private func shimClientCountChanged(_ count: Int) {
         shimConnected = count > 0
+        publishStatus()
         guard isSubscribed else { return }
         if shimConnected {
             beginEndToEndHandshake()
@@ -849,6 +1162,8 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     }
 
     private func beginEndToEndHandshake() {
+        healthProbeWorkItem?.cancel()
+        healthProbeWorkItem = nil
         healthCheckTimeoutWorkItem?.cancel()
         healthCheckTimeoutWorkItem = nil
         pendingHealthRequestIDs.removeAll()
@@ -954,9 +1269,25 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         detail: String,
         force: Bool = false
     ) {
-        guard force || state != endToEndState || detail != endToEndDetail else { return }
+        let changed = force || state != endToEndState || detail != endToEndDetail
         endToEndState = state
         endToEndDetail = detail
+        if state == .operational {
+            lastSuccessfulRoundTrip = Date()
+            scheduleHealthProbe()
+            // Every matching request/response is fresh liveness evidence even
+            // when the semantic state remains operational. Publish the new
+            // timestamp without spamming the iPhone or logs.
+            publishStatus()
+            guard changed else { return }
+        } else {
+            healthProbeWorkItem?.cancel()
+            healthProbeWorkItem = nil
+        }
+        guard changed else { return }
+        if state != .operational {
+            publishStatus()
+        }
         let object: [String: Any] = [
             "type": "connection-health",
             "version": 1,
@@ -966,6 +1297,51 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         guard let json = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) else { return }
         sendConfigJSON(json)
         log("connection health: \(state.rawValue) — \(detail)")
+    }
+
+    /// A connected socket and subscribed BLE characteristic can both remain
+    /// nominal after one endpoint becomes wedged. If ordinary ChatGPT traffic
+    /// has not already supplied a recent request/response, periodically
+    /// re-present the virtual device so ChatGPT performs another real RPC
+    /// through the iPhone before the menu bar remains healthy.
+    private func scheduleHealthProbe() {
+        healthProbeWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.healthProbeWorkItem = nil
+            guard self.shouldRun,
+                  self.isSubscribed,
+                  self.shimConnected,
+                  self.endToEndState == .operational else { return }
+
+            if let last = self.lastSuccessfulRoundTrip,
+               Date().timeIntervalSince(last) < self.healthProbeInterval * 0.8 {
+                self.scheduleHealthProbe()
+                return
+            }
+            self.beginEndToEndHandshake()
+        }
+        healthProbeWorkItem = work
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + healthProbeInterval,
+            execute: work
+        )
+    }
+
+    private func publishStatus() {
+        let snapshot = CodexMicroBridgeStatus(
+            bluetooth: bluetoothState,
+            phoneName: phone?.name,
+            phoneLinked: phoneConnected,
+            reportStreamReady: isSubscribed,
+            chatGPTLinked: shimConnected,
+            endToEnd: endToEndState,
+            detail: endToEndDetail,
+            lastSuccessfulRoundTrip: lastSuccessfulRoundTrip
+        )
+        DispatchQueue.main.async { [weak self] in
+            self?.onStatusChange(snapshot)
+        }
     }
 
     /// Channel 5 is private to the phone/helper pair. It is never forwarded
@@ -1193,7 +1569,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     }
 
     /// VSCode target: the phone asked for the latest lighting. There is no
-    /// ChatGPT cache to replay, so re-emit from SidePulse status instead.
+    /// ChatGPT cache to replay, so re-emit from CodexMicro status instead.
     var onRefreshRequest: (() -> Void)?
 
     /// VSCode target: the phone edited the agent-key pin map (Editor pins screen).
@@ -1385,7 +1761,7 @@ final class EmuDevice {
         }
     }
 
-    /// Device -> host SidePulse control message on channel 4 (not part of the
+    /// Device -> host CodexMicro control message on channel 4 (not part of the
     /// Codex Micro protocol). The shim consumes it to run host-side actions like
     /// clearing the composer; ChatGPT's device layer never sees it.
     func sendControl(_ obj: [String: Any]) {
@@ -1395,7 +1771,7 @@ final class EmuDevice {
             let chunk = min(61, payload.count - offset)
             var report = Data(count: 64)
             report[0] = hidReportID
-            report[1] = 4 // SidePulse control channel (1 debug, 2 RPC, 3 layout)
+            report[1] = 4 // CodexMicro control channel (1 debug, 2 RPC, 3 layout)
             report[2] = UInt8(chunk)
             report.replaceSubrange(3..<(3 + chunk), with: payload.subdata(in: offset..<(offset + chunk)))
             server.broadcastInput(report)
@@ -1442,7 +1818,7 @@ func startStdinLoop(_ emu: EmuDevice) {
       fast|approve|decline|fork|mic|send [press|release]
       up|down|left|right [press|release]
       enc cw|cc|press
-      clear                       clear the ChatGPT composer (SidePulse channel 4)
+      clear                       clear the ChatGPT composer (CodexMicro channel 4)
       json <raw json>
     """)
 
@@ -1833,7 +2209,7 @@ final class PinToggleGate {
     }
 }
 
-/// Watches SidePulse's status.json and turns per-session status into agent-key
+/// Watches CodexMicro's status.json and turns per-session status into agent-key
 /// lighting (v.oai.thstatus), so the macropad LEDs reflect live Claude / Codex /
 /// Kimi session state — the same source that drives the LED strip.
 final class StatusLights {
@@ -1848,7 +2224,7 @@ final class StatusLights {
     private var selectedSlot: Int?
     /// Concrete target metadata keyed by the agent slot to which that exact
     /// target ID is pinned. This is also the assignment gate: absent slots are
-    /// always off, regardless of unrelated SidePulse strip slot numbers.
+    /// always off, regardless of unrelated CodexMicro strip slot numbers.
     private var assignedTargets: [Int: [String: Any]] = [:]
 
     // status -> (packed 0xRRGGBB, effect id, effect speed). Effects: 1 solid, 4 breath.
@@ -1956,7 +2332,7 @@ final class StatusLights {
         return ["method": "v.oai.thstatus", "params": slots]
     }
 
-    /// Kept as a helper instead of relying on SidePulse's numeric strip slot:
+    /// Kept as a helper instead of relying on CodexMicro's numeric strip slot:
     /// strip allocation is global and has no relationship to the user's VS
     /// Code pins. Prefer an explicit target ID when hooks provide one, then a
     /// concrete provider+working-directory match. Ambiguous/unmatched targets
@@ -3441,15 +3817,26 @@ final class T3Controller {
     private let backend: T3Backend
     private let lock = NSLock()
     private var latest: T3BackendSnapshot?
+    private var nativeVoiceActive = false
+    private var dictationIssue: String?
     private var started = false
     private let pinToggleGate = PinToggleGate()
-    /// (targets, pins, selected, connected, slots, issue)
-    var onPublish: ([[String: Any]], [String?], String?, Bool, [[String: Any]], String?) -> Void
-        = { _, _, _, _, _, _ in }
+    private let dictation = MacOSDictationController()
+    /// (targets, pins, selected, connected, slots, issue, native voice)
+    var onPublish: ([[String: Any]], [String?], String?, Bool, [[String: Any]], String?, Bool) -> Void
+        = { _, _, _, _, _, _, _ in }
 
     init(backend: T3Backend = T3Backend()) {
         self.backend = backend
         backend.setUpdateHandler { [weak self] snapshot in self?.ingest(snapshot) }
+        dictation.onStateChange = { [weak self] active, issue in
+            guard let self else { return }
+            self.lock.lock()
+            self.nativeVoiceActive = active
+            self.dictationIssue = issue
+            self.lock.unlock()
+            self.publish()
+        }
     }
 
     /// Called when the user switches to the T3 page. Idempotent: starts the
@@ -3488,7 +3875,11 @@ final class T3Controller {
         let selected = snapshot?.pins.selectedTargetID
         let pins = normalizedPins(snapshot?.pins.slots ?? [])
         let connected = (snapshot?.phase == .connected)
-        let issue = snapshot?.issue?.message
+        lock.lock()
+        let nativeVoiceActive = nativeVoiceActive
+        let dictationIssue = dictationIssue
+        lock.unlock()
+        let issue = dictationIssue ?? snapshot?.issue?.message
         let targetDicts: [[String: Any]] = targets.map { target in
             [
                 "id": target.id,
@@ -3500,7 +3891,7 @@ final class T3Controller {
             ]
         }
         let slots = buildSlots(pins: pins, selected: selected, targets: targets)
-        onPublish(targetDicts, pins, selected, connected, slots, issue)
+        onPublish(targetDicts, pins, selected, connected, slots, issue, nativeVoiceActive)
     }
 
     private func buildSlots(pins: [String?], selected: String?, targets: [T3Target]) -> [[String: Any]] {
@@ -3535,6 +3926,31 @@ final class T3Controller {
     func handleEvent(_ method: String, _ params: [String: Any]) {
         guard method == "v.oai.hid", let k = params["k"] as? String else { return }
         let act = params["act"] as? Int ?? 1
+        if k == "ENC_CC", act == 2 {
+            T3DesktopCommand.sendEffort(increasing: true)
+            return
+        }
+        if k == "ENC_CW", act == 2 {
+            T3DesktopCommand.sendEffort(increasing: false)
+            return
+        }
+        if act == 1 {
+            let actions = [
+                "ACT06": "fast",
+                "ACT07": "new",
+                "ACT09": "fork",
+                "ACT12": "send",
+                "JOY_UP": "frontendMax",
+                "JOY_RIGHT": "browser",
+                "JOY_DOWN": "terminal",
+                "JOY_LEFT": "sideChat",
+                "ENC_HOLD": "settings",
+            ]
+            if let action = actions[k] {
+                T3DesktopCommand.sendAction(action)
+                return
+            }
+        }
         guard act == 1, k.hasPrefix("AG") else { return }
         let idx = (params["ag"] as? Int) ?? Int(k.dropFirst(2)) ?? 0
         guard let snapshot = snapshotNow(), snapshot.pins.slots.indices.contains(idx),
@@ -3564,10 +3980,12 @@ final class T3Controller {
             let value = (object["value"] as? String) ?? ""
             guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             backend.sendPrompt(value, to: nil) { _ in }
-        case "vscodeVoice", "vscodeRaise":
-            // Voice is delivered as transcribed text via vscodeInsert; T3 is a
-            // local server with no front-facing app to raise.
-            break
+        case "vscodeVoice":
+            dictation.setActive(object["active"] as? Bool ?? false)
+        case "vscodeRaise":
+            let target = (object["target"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+                ?? snapshotNow()?.pins.selectedTargetID
+            T3DesktopCommand.focus(targetID: target)
         default:
             break
         }
@@ -3872,13 +4290,16 @@ func runBridgeRegressionTests() -> Bool {
 
 // MARK: - entry point
 
+#if CODEX_MICRO_MENU_APP
+CodexMicroMenuApplication.run()
+#else
 enum Target { case auto, chatgpt, vscode }
 
 var emulate = false
 var runSelfTests = false
 var checkAccessibility = false
 var target: Target = .auto
-var socketPath = "/tmp/codexbridge.sock"
+var socketPath = defaultCodexBridgeSocketPath()
 var vscodeSocket = NSTemporaryDirectory() + "codexbridge-vscode.sock"
 var args = CommandLine.arguments.dropFirst()
 while let arg = args.popFirst() {
@@ -3931,7 +4352,7 @@ if target == .auto, !emulate {
         path: NSHomeDirectory() + "/.codexbridge/claude-desktop-pins.json"
     )
     let t3Controller = T3Controller()
-    let statusPath = (NSHomeDirectory() as NSString).appendingPathComponent("Library/Caches/SidePulse/status.json")
+    let statusPath = (NSHomeDirectory() as NSString).appendingPathComponent("Library/Caches/CodexMicro/status.json")
     let lights = StatusLights(path: statusPath)
     let bridge = Bridge(server: server)
     let activeControlTargetDefaultsKey = "CodexMicroBridge.activeControlTarget"
@@ -3990,11 +4411,13 @@ if target == .auto, !emulate {
             bridge?.sendVSCodeState(targets: targets, pins: pins, selected: selected, connected: connected)
         }
     }
-    t3Controller.onPublish = { [weak bridge] targets, pins, selected, connected, slots, issue in
+    t3Controller.onPublish = {
+        [weak bridge] targets, pins, selected, connected, slots, issue, nativeVoiceActive in
         DispatchQueue.main.async {
             bridge?.sendWorkspaceState(
                 surface: "t3code", targets: targets, pins: pins,
-                selected: selected, connected: connected, slots: slots, issue: issue
+                selected: selected, connected: connected, slots: slots, issue: issue,
+                nativeVoiceActive: nativeVoiceActive
             )
         }
     }
@@ -4022,7 +4445,7 @@ if target == .auto, !emulate {
     }
     // Re-emit the active surface's state on (re)subscribe and on every foreground
     // refresh so a dropped BLE frame always self-heals. Each surface is
-    // independent: VS Code re-emits SidePulse lights, T3 republishes its backend
+    // independent: VS Code re-emits CodexMicro lights, T3 republishes its backend
     // snapshot, Claude Desktop republishes its native-app pin state, and
     // ChatGPT replays its cached lighting.
     let reemitActiveSurface = { [weak bridge] in
@@ -4056,7 +4479,7 @@ if target == .auto, !emulate {
     let pinMap = PinMap(path: NSHomeDirectory() + "/.codexbridge/pins.json")
     let controller = VSCodeController(client: client, pins: pinMap)
     client.start()
-    let statusPath = (NSHomeDirectory() as NSString).appendingPathComponent("Library/Caches/SidePulse/status.json")
+    let statusPath = (NSHomeDirectory() as NSString).appendingPathComponent("Library/Caches/CodexMicro/status.json")
     let lights = StatusLights(path: statusPath)
 
     if emulate {
@@ -4132,3 +4555,4 @@ if target == .auto, !emulate {
 }
 
 RunLoop.main.run()
+#endif

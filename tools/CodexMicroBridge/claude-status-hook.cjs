@@ -4,8 +4,8 @@
 // Codex Micro — Claude Code status feed.
 //
 // Claude Code fires lifecycle hooks; this tiny hook translates them into the
-// SidePulse status file the Codex Micro bridge already reads
-// (~/Library/Caches/SidePulse/status.json), so a pinned Claude conversation's
+// CodexMicro status file the Codex Micro bridge already reads
+// (~/Library/Caches/CodexMicro/status.json), so a pinned Claude conversation's
 // agent key lights BLUE while it is working, AMBER when it needs input, and
 // GREEN when it completes — instead of always white.
 //
@@ -51,7 +51,7 @@ function main() {
   const sessionId = String(input.session_id || input.sessionId || 'claude');
   const cwd = input.cwd || process.cwd();
 
-  const dir = path.join(os.homedir(), 'Library', 'Caches', 'SidePulse');
+  const dir = path.join(os.homedir(), 'Library', 'Caches', 'CodexMicro');
   const file = path.join(dir, 'status.json');
   try { fs.mkdirSync(dir, { recursive: true }); } catch (_) { /* ignore */ }
 

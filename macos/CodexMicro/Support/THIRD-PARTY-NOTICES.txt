@@ -1,0 +1,13 @@
+Codex Micro — third-party notices
+=================================
+
+The self-contained ChatGPT patch runtime includes:
+
+- Node.js, distributed under the MIT License and additional licenses recorded
+  in Node's official LICENSE file. The complete upstream license text is
+  bundled beside this notice as NODE-LICENSE.txt.
+- @electron/asar and its npm dependencies. Their complete license files remain
+  inside node_modules beside the distributed package sources.
+
+Runtime versions are recorded in runtime-version.json. Codex Micro does not
+replace or remove the license files shipped by these dependencies.

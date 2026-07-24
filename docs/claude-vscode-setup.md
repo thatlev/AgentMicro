@@ -14,15 +14,15 @@ helper do it entirely through public APIs.
   Claude Code, OpenAI Codex/ChatGPT, or Moonshot Kimi Code.
 - Terminal launchers require their executable (`claude`, `codex`, or `kimi`) on
   the shell PATH inherited by VS Code.
-- Live blue/green/amber/red states come from SidePulse's existing lifecycle
-  hooks in `~/Library/Caches/SidePulse/status.json`. No extra daemon is needed
-  if the SidePulse strip already tracks those sessions.
+- Live blue/green/amber/red states come from Codex Micro's lifecycle
+  hooks in `~/Library/Caches/CodexMicro/status.json`. No extra daemon is needed
+  if the Codex Micro status feed already tracks those sessions.
 - Claude editor-chat targets use Claude's own dictation while the key is held.
   Codex, Kimi, terminals, normal editor tabs, and auto-send use iPhone speech.
   The first iPhone-capture press asks for Microphone and Speech Recognition
   permission; it does not require the Siri/keyboard Dictation switch.
 iPhone (BLE) ─▶ codexbridge (auto) ─▶ $TMPDIR/codexbridge-vscode.sock ─▶ Codex Micro VSCode extension ─▶ executeCommand / terminal.sendText
-             ◀── agent-key LEDs ◀── SidePulse status.json ◀── Claude/Codex/Kimi lifecycle hooks
+             ◀── agent-key LEDs ◀── Codex Micro status.json ◀── Claude/Codex/Kimi lifecycle hooks
 ```
 
 ## One-time install
@@ -40,7 +40,7 @@ iPhone (BLE) ─▶ codexbridge (auto) ─▶ $TMPDIR/codexbridge-vscode.sock �
    ```
 
 3. **iPhone app** — already built and installed on iPhone L
-   (`com.sidepulse.codexmicroremote`). To rebuild:
+   (`io.github.thislev.codexmicroremote`). To rebuild:
    ```bash
    cd ios/CodexMicroRemote && xcodegen generate
    xcodebuild -scheme CodexMicroRemote -configuration Debug \
@@ -108,10 +108,10 @@ one ordered operation bound to the chat selected at touch-down.
 
 ## Agent-key lighting
 
-The bridge reads SidePulse's `~/Library/Caches/SidePulse/status.json` (fed by the
+The bridge reads Codex Micro's `~/Library/Caches/CodexMicro/status.json` (fed by the
 Claude/Codex/Kimi lifecycle hooks already in `~/.claude/settings.json`) and
 lights only explicitly pinned targets. It matches target ID first, then the
-concrete provider/workspace; SidePulse's unrelated global strip-slot numbers
+concrete provider/workspace; unrelated global strip-slot numbers
 never allocate a VS Code agent key:
 
 | Status | Color |

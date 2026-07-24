@@ -2,7 +2,7 @@
 //  ContentView.swift
 //  CodexMicroRemote
 //
-//  A responsive, touch-first recreation of the Work Louder Codex Micro.
+//  A responsive, touch-first Codex Micro remote.
 //
 
 import SwiftUI
@@ -71,6 +71,81 @@ enum CodexMicSource: String, CaseIterable, Identifiable {
     }
 }
 
+/// Optional iPhone-only actions for the five command keys that are safe to
+/// override locally. "Follow Mac" preserves the host's synced Codex/T3 action.
+/// Overrides are scoped per surface and never alter ChatGPT's own layout.
+private enum MobileKeyOverride: String, CaseIterable, Identifiable {
+    case host
+    case clearComposer
+    case openSettings
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .host: return "Follow Mac"
+        case .clearComposer: return "Clear message"
+        case .openSettings: return "Open settings"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .host: return "arrow.triangle.2.circlepath"
+        case .clearComposer: return "delete.left"
+        case .openSettings: return "slider.horizontal.3"
+        }
+    }
+}
+
+private enum MobileKeyOverrideStore {
+    static let storageKey = "codexMicro.mobileKeyOverrides.v1"
+    static let assignableSlots = ["ACT06", "ACT07", "ACT08", "ACT09", "ACT12"]
+
+    static func override(
+        for slot: String,
+        page: ControlPage,
+        encoded: String
+    ) -> MobileKeyOverride {
+        guard let data = encoded.data(using: .utf8),
+              let values = try? JSONDecoder().decode([String: String].self, from: data),
+              let raw = values[key(slot: slot, page: page)]
+        else {
+            return .host
+        }
+        return MobileKeyOverride(rawValue: raw) ?? .host
+    }
+
+    static func setting(
+        _ value: MobileKeyOverride,
+        for slot: String,
+        page: ControlPage,
+        encoded: String
+    ) -> String {
+        var values: [String: String] = [:]
+        if let data = encoded.data(using: .utf8),
+           let decoded = try? JSONDecoder().decode([String: String].self, from: data) {
+            values = decoded
+        }
+        let storageKey = key(slot: slot, page: page)
+        if value == .host {
+            values.removeValue(forKey: storageKey)
+        } else {
+            values[storageKey] = value.rawValue
+        }
+        guard let data = try? JSONEncoder().encode(values),
+              let result = String(data: data, encoding: .utf8)
+        else {
+            return encoded
+        }
+        return result
+    }
+
+    private static func key(slot: String, page: ControlPage) -> String {
+        "\(page.hostTarget).\(slot)"
+    }
+}
+
 /// A stable, persisted identity for each isolated desktop control surface.
 /// Keep the raw values fixed: `codexMicro.controlPage` stores them directly.
 /// The host target is intentionally part of this pure model so routing can be
@@ -83,10 +158,10 @@ enum ControlPage: Int, CaseIterable, Identifiable {
 
     var id: Int { rawValue }
 
-    /// Pages actually shown in the swipe/dots. The T3 Code page is a first-class
-    /// isolated surface that talks straight to the open-source T3 server over the
-    /// LAN (no Mac bridge). VS Code remains implemented but parked.
-    static let displayed: [ControlPage] = [.codex, .claudeCode, .t3Code]
+    /// The shipped phone app exposes the two supported production surfaces.
+    /// Codex is routed through the Codex Micro menu-bar companion; T3 Code is
+    /// routed directly to the custom T3 desktop build.
+    static let displayed: [ControlPage] = [.codex, .t3Code]
     var isDisplayed: Bool { ControlPage.displayed.contains(self) }
 
     var title: String {
@@ -298,7 +373,8 @@ struct ContentView: View {
     @AppStorage("codexMicro.t3CodeCustomCommand") private var t3CodeCustomLauncherValue = ""
     @AppStorage("codexMicro.claudeCodeLauncher") private var claudeCodeLauncherRaw = WorkspaceLauncher.claudeNewSession.rawValue
     @AppStorage("codexMicro.claudeCodeCustomLink") private var claudeCodeCustomLauncherValue = ""
-    @AppStorage("codexMicro.voiceAutoSend") private var voiceAutoSend = false
+    @AppStorage("codexMicro.codexVoiceAutoSend") private var codexVoiceAutoSend = false
+    @AppStorage("codexMicro.t3VoiceAutoSend") private var t3VoiceAutoSend = false
     @AppStorage("codexMicro.useMacProviderVoice") private var useMacProviderVoice = false
     @AppStorage("codexMicro.codexMicSource") private var codexMicSourceRaw = CodexMicSource.computer.rawValue
     @State private var isShowingDetails = false
@@ -316,6 +392,7 @@ struct ContentView: View {
 
                 VStack(spacing: contentSpacing(for: geometry.size)) {
                     statusBar
+                        .padding(.horizontal, 6)
 
                     GeometryReader { boardSpace in
                         // PageTabViewStyle supplies the system UIPageControl.
@@ -363,7 +440,7 @@ struct ContentView: View {
             mode: surfaceMode,
             page: page,
             voiceRecorder: voiceRecorder,
-            autoSendVoicePrompts: voiceAutoSend,
+            autoSendVoicePrompts: page == .t3Code ? t3VoiceAutoSend : codexVoiceAutoSend,
             useMacProviderVoice: useMacProviderVoice,
             codexMicSource: codexMicSource,
             workspaceLauncher: selectedLauncher(for: page),
@@ -391,7 +468,6 @@ struct ContentView: View {
 
     private var selectedPage: ControlPage {
         let page = ControlPage(rawValue: pageRaw) ?? .codex
-        // Never resolve to a hidden page (e.g. a persisted T3 selection).
         return page.isDisplayed ? page : .codex
     }
 
@@ -455,29 +531,6 @@ struct ContentView: View {
             .buttonStyle(.plain)
             .accessibilityHint("Shows Bluetooth connection details")
 
-            if (selectedPage == .codex && peripheral.canControlChatGPT)
-                || (selectedPage == .claudeCode && peripheral.hostConnected) {
-                Button {
-                    if selectedPage == .codex {
-                        peripheral.clearComposer()
-                    } else {
-                        peripheral.clearWorkspaceComposer(surface: selectedPage.hostTarget)
-                    }
-                } label: {
-                    Image(systemName: "delete.left")
-                        .font(.body.weight(.semibold))
-                        .frame(width: 44, height: 44)
-                        .background(.thinMaterial, in: Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(
-                    selectedPage == .codex
-                        ? "Clear the ChatGPT message box"
-                        : "Clear the Claude message box"
-                )
-                .accessibilityHint("Clears all text in the current composer")
-            }
-
             Button {
                 isShowingDetails = true
             } label: {
@@ -520,7 +573,7 @@ struct ContentView: View {
             return "Connected to your Mac"
         }
         if peripheral.bridgeMode, peripheral.isAdvertising {
-            return "Waiting for the Mac helper"
+            return "Waiting for a Mac connection"
         }
         return "iPhone control surface"
     }
@@ -565,9 +618,7 @@ struct ContentView: View {
             return ("Starting", "ellipsis.circle.fill", .secondary)
         }
         if peripheral.isAdvertising {
-            return peripheral.bridgeMode
-                ? ("Waiting for Mac helper", "dot.radiowaves.left.and.right", .blue)
-                : ("Ready to pair", "dot.radiowaves.left.and.right", .blue)
+            return ("Waiting for Mac", "dot.radiowaves.left.and.right", .blue)
         }
         return ("Ready", "checkmark.circle.fill", Color(packedRGB: 0x168A55))
     }
@@ -615,6 +666,7 @@ private struct HardwareConsole: View {
     let workspaceLauncher: WorkspaceLauncher
     let customLauncherValue: String
     let openConnectionDetails: () -> Void
+    @AppStorage(MobileKeyOverrideStore.storageKey) private var mobileKeyOverrides = ""
 
     /// Set while hands-free voice recording is latched — lights the whole
     /// case shell and engraved legends in the recording color.
@@ -630,8 +682,6 @@ private struct HardwareConsole: View {
     }
 
     private var effectiveWorkspacePins: [String?] { workspaceState.pins }
-
-    private var effectiveWorkspaceTargets: [VSCodeTarget] { workspaceState.targets }
 
     private var effectiveSelectedTargetID: String? { workspaceState.selectedTargetID }
     /// Active voice colour. Rather than drawing a new outline over the board,
@@ -705,6 +755,10 @@ private struct HardwareConsole: View {
                             onPress: { pressing in
                                 if pressing { pulseDialPerimeter() }
                                 routeKey("ENC", action: pressing ? 1 : 0)
+                            },
+                            onLongPress: {
+                                guard page == .t3Code else { return }
+                                routeKey("ENC_HOLD", action: 1)
                             }
                         )
                         .frame(width: keySide, height: keySide)
@@ -715,8 +769,8 @@ private struct HardwareConsole: View {
                         JoystickControl { angle, distance in
                             if page == .codex {
                                 peripheral.sendJoystick(angle: angle, distance: distance)
-                            } else if page == .claudeCode {
-                                routeClaudeJoystick(angle: angle, distance: distance)
+                            } else {
+                                routeWorkspaceJoystick(angle: angle, distance: distance)
                             }
                         }
                         .frame(width: keySide, height: keySide)
@@ -748,14 +802,9 @@ private struct HardwareConsole: View {
                                 sendKey("ACT09", pressing: $0)
                             }
                         } else {
-                            workspaceNewKey(side: keySide)
-                            workspaceActionKey("APPR", symbol: "checkmark", accent: Color(packedRGB: 0x168A55), side: keySide) {
-                                sendKey("ACT07", pressing: $0)
+                            ForEach(0..<4, id: \.self) { index in
+                                t3ConfiguredActionKey(index: index, side: keySide)
                             }
-                            workspaceActionKey("REJ", symbol: "xmark", accent: Color(packedRGB: 0xCC334F), side: keySide) {
-                                sendKey("ACT08", pressing: $0)
-                            }
-                            workspacePinKey(side: keySide)
                         }
                     }
 
@@ -776,18 +825,20 @@ private struct HardwareConsole: View {
                                 // the bridge activates the app and invokes its
                                 // native Command-D dictation toggle. The VS Code
                                 // surface retains its provider-advertised route.
-                                usesNativeVoice: page == .claudeCode
+                                usesNativeVoice: page == .t3Code
+                                    || page == .claudeCode
                                     || (page == .vscode
                                         && selectedWorkspaceTarget?.nativeVoice == true
                                         && !autoSendVoicePrompts),
-                                confirmedNativeVoiceActive: page == .claudeCode
+                                confirmedNativeVoiceActive: page == .claudeCode || page == .t3Code
                                     ? workspaceState.nativeVoiceActive
                                     : nil,
                                 onNativeVoice: { active, targetID in
                                     peripheral.setVSCodeNativeVoice(
                                         active,
                                         targetID: targetID,
-                                        surface: page.hostTarget
+                                        surface: page.hostTarget,
+                                        autoSend: autoSendVoicePrompts
                                     )
                                 }
                             ) { text, targetID, autoSend in
@@ -806,14 +857,7 @@ private struct HardwareConsole: View {
                         } else if page == .claudeCode {
                             workspaceSendKey(side: keySide)
                         } else {
-                            workspaceActionKey(
-                                "SEND",
-                                symbol: "arrow.up",
-                                accent: Color(packedRGB: 0x168A55),
-                                side: keySide
-                            ) {
-                                sendKey("ACT12", pressing: $0)
-                            }
+                            workspaceSendKey(side: keySide)
                         }
                     }
                 }
@@ -896,7 +940,7 @@ private struct HardwareConsole: View {
     private func shell(side: CGFloat) -> some View {
         let shellCorner = side * 0.102
         let plateCorner = side * 0.055
-        let bright = max(0, min(1, peripheral.lightingBrightness ?? 1))
+        let bright = max(0, min(1, peripheral.effectiveLightingBrightness))
         let activeSnake = casingSnake ?? hostThreadSnake
         let dialGreen = Color(packedRGB: 0x39D98A)
         let dialPulseIsActive = dialPulseStrength > 0.001
@@ -1012,7 +1056,7 @@ private struct HardwareConsole: View {
         let ink = highlighted ? glowColor : Color.black.opacity(0.64)
         let glowRadius = max(1.5, side * 0.011)
 
-        Text("WORK LOUDER · OPENAI 2026")
+        Text("CODEX MICRO · REMOTE")
             .font(highlighted ? inscriptionFont.weight(.semibold) : inscriptionFont)
             .foregroundStyle(ink)
             .shadow(color: highlighted ? glowColor.opacity(0.75) : .clear, radius: glowRadius)
@@ -1043,7 +1087,7 @@ private struct HardwareConsole: View {
         AgentKeyView(
             light: light(at: index),
             index: index,
-            brightness: peripheral.lightingBrightness ?? 1
+            brightness: peripheral.effectiveLightingBrightness
         ) { pressing in
             // AG00 is deliberately not replaced with an invented "cancel"
             // command. ChatGPT contextually interprets this exact Agent Key 1
@@ -1078,29 +1122,12 @@ private struct HardwareConsole: View {
             }
             routeKey("AG0\(index)", action: pressing ? 1 : 0, agent: index)
         }
-        .overlay(alignment: .topTrailing) {
-            if page.usesWorkspaceBridge,
-               effectiveWorkspacePins.indices.contains(index),
-               effectiveWorkspacePins[index] != nil {
-                Image(systemName: "pin.fill")
-                    .font(.system(size: max(8, side * 0.14), weight: .bold))
-                    .foregroundStyle(.primary.opacity(0.72))
-                    .padding(max(5, side * 0.09))
-                    .accessibilityHidden(true)
-            }
-        }
         .accessibilityLabel(agentAccessibilityLabel(index))
         .frame(width: side, height: side)
     }
 
     private func agentAccessibilityLabel(_ index: Int) -> String {
-        guard page.usesWorkspaceBridge,
-              effectiveWorkspacePins.indices.contains(index),
-              let id = effectiveWorkspacePins[index],
-              let target = effectiveWorkspaceTargets.first(where: { $0.id == id }) else {
-            return "Agent \(index + 1)"
-        }
-        return "Agent \(index + 1), pinned to \(target.label)"
+        "Agent \(index + 1)"
     }
 
     private func light(at index: Int) -> SlotLight {
@@ -1224,10 +1251,9 @@ private struct HardwareConsole: View {
         }
     }
 
-    /// Claude's four joystick directions map to Claude Desktop's own commands:
-    /// right Browser, down Terminal, left Side Chat, and up /frontend-max.
-    /// Only the Claude surface emits these private key IDs.
-    private func routeClaudeJoystick(angle: Double, distance: Double) {
+    /// Workspace pages emit one cardinal action per deflection. T3 Code maps
+    /// these to plan mode, sidebar, and back/forward navigation.
+    private func routeWorkspaceJoystick(angle: Double, distance: Double) {
         guard distance >= 0.28 else {
             activeClaudeJoystickDirection = nil
             return
@@ -1246,8 +1272,16 @@ private struct HardwareConsole: View {
     /// The raw HID id sent stays fixed (the physical slot); only the label syncs.
     private func commandKey(_ slotId: String, side: CGFloat) -> some View {
         let binding = peripheral.layout.binding(forSlot: slotId)
-        let descriptor = KeycapCatalog.descriptor(for: binding.keycapId)
         let rawKey = slotId == "ACT10_ACT11" ? "ACT10" : slotId
+        let localOverride = MobileKeyOverrideStore.override(
+            for: slotId,
+            page: page,
+            encoded: mobileKeyOverrides
+        )
+        let hostDescriptor = KeycapCatalog.descriptor(for: binding.keycapId)
+        let descriptor = localOverride == .host
+            ? hostDescriptor
+            : localOverrideDescriptor(localOverride)
         return CommandKey(
             title: descriptor.label,
             symbol: descriptor.symbol,
@@ -1255,6 +1289,10 @@ private struct HardwareConsole: View {
             accessibilityName: descriptor.accessibilityName,
             hint: descriptor.hint
         ) { pressing in
+            if localOverride != .host {
+                if pressing { performLocalOverride(localOverride) }
+                return
+            }
             if pressing, rawKey == "ACT12" { markCodexPromptSubmitted() }
             sendKey(rawKey, pressing: pressing)
             // CODEX submits the pending voice prompt; signal the mic to clear.
@@ -1280,6 +1318,45 @@ private struct HardwareConsole: View {
         .frame(width: side, height: side)
     }
 
+    @ViewBuilder
+    private func t3ConfiguredActionKey(index: Int, side: CGFloat) -> some View {
+        let defaults = [
+            WorkspaceActionKey(key: "ACT06", action: "fast", label: "FAST", symbol: "bolt.fill", accent: 0x168AFF),
+            WorkspaceActionKey(key: "ACT07", action: "new", label: "NEW", symbol: "square.and.pencil", accent: 0x168A55),
+            WorkspaceActionKey(key: "ACT08", action: "pin", label: "PIN", symbol: "pin.fill", accent: 0x8B5CF6),
+            WorkspaceActionKey(key: "ACT09", action: "clear", label: "CLEAR", symbol: "trash", accent: 0x5B6675)
+        ]
+        let configured = workspaceState.actionKeys.indices.contains(index)
+            ? workspaceState.actionKeys[index]
+            : defaults[index]
+        let localOverride = MobileKeyOverrideStore.override(
+            for: configured.key,
+            page: page,
+            encoded: mobileKeyOverrides
+        )
+        let descriptor = localOverride == .host
+            ? KeycapDescriptor(
+                label: configured.label,
+                symbol: configured.symbol,
+                accent: Color(packedRGB: configured.accent),
+                accessibilityName: configured.label,
+                hint: "T3 Code \(configured.label.lowercased())"
+            )
+            : localOverrideDescriptor(localOverride)
+        workspaceActionKey(
+            descriptor.label,
+            symbol: descriptor.symbol,
+            accent: descriptor.accent,
+            side: side
+        ) { pressing in
+            if localOverride == .host {
+                sendKey(configured.key, pressing: pressing)
+            } else if pressing {
+                performLocalOverride(localOverride)
+            }
+        }
+    }
+
     private func workspaceBlankKey(side: CGFloat) -> some View {
         HardwareKeyCap(pressed: false, glowColor: nil) {
             Circle()
@@ -1296,22 +1373,64 @@ private struct HardwareConsole: View {
     /// private bridge route specific to Claude Desktop.
     private func workspaceSendKey(side: CGFloat) -> some View {
         let binding = peripheral.layout.binding(forSlot: "ACT12")
-        let descriptor = KeycapCatalog.descriptor(for: binding.keycapId)
+        let localOverride = MobileKeyOverrideStore.override(
+            for: "ACT12",
+            page: page,
+            encoded: mobileKeyOverrides
+        )
+        let descriptor = localOverride == .host
+            ? KeycapCatalog.descriptor(for: binding.keycapId)
+            : localOverrideDescriptor(localOverride)
         return CommandKey(
             title: descriptor.label,
             symbol: descriptor.symbol,
             accent: descriptor.accent,
-            accessibilityName: "Send to Claude",
-            hint: "Sends the current Claude Desktop composer message"
+            accessibilityName: "Send to \(page.surfaceName)",
+            hint: "Sends the current \(page.surfaceName) composer message"
         ) { pressing in
-            sendKey("ACT12", pressing: pressing)
+            if localOverride == .host {
+                sendKey("ACT12", pressing: pressing)
+            } else if pressing {
+                performLocalOverride(localOverride)
+            }
         }
         .frame(width: side, height: side)
     }
 
+    private func localOverrideDescriptor(_ value: MobileKeyOverride) -> KeycapDescriptor {
+        KeycapDescriptor(
+            label: value == .clearComposer ? "CLEAR" : "SET",
+            symbol: value.symbol,
+            accent: value == .clearComposer ? .red : Color(packedRGB: page.accentRGB),
+            accessibilityName: value.title,
+            hint: value == .clearComposer
+                ? "Clears the current message"
+                : "Opens Codex Micro settings"
+        )
+    }
+
+    private func performLocalOverride(_ value: MobileKeyOverride) {
+        switch value {
+        case .host:
+            break
+        case .clearComposer:
+            if page == .codex {
+                peripheral.clearComposer()
+            } else {
+                peripheral.clearWorkspaceComposer(surface: page.hostTarget)
+            }
+        case .openSettings:
+            openConnectionDetails()
+        }
+    }
+
     private func workspaceNewKey(side: CGFloat) -> some View {
-        workspaceActionKey("NEW", symbol: "plus", accent: Color(packedRGB: page.accentRGB), side: side) { pressing in
+        workspaceActionKey("NEW", symbol: "square.and.pencil", accent: Color(packedRGB: 0x168A55), side: side) { pressing in
             guard pressing else { return }
+            if page == .t3Code {
+                sendKey("ACT07", pressing: true)
+                return
+            }
             let value = workspaceLauncher.requiresCustomValue
                 ? customLauncherValue.trimmingCharacters(in: .whitespacesAndNewlines)
                 : workspaceLauncher.value
@@ -2156,9 +2275,8 @@ private struct VSCodeVoiceKey: View {
     let targetID: String?
     let autoSend: Bool
     let opensExternalPrefill: Bool
-    /// Native provider dictation is used only when the selected concrete
-    /// target advertises it and auto-send is off. Auto-send needs a transcript
-    /// completion event, which Claude's VS Code command does not expose.
+    /// Native dictation is used for T3's macOS composer and for concrete
+    /// provider targets that advertise their own voice action.
     let usesNativeVoice: Bool
     /// Claude Desktop confirms start/stop through bridge state. Nil retains the
     /// existing local latch for providers that do not publish acknowledgements.
@@ -2247,9 +2365,9 @@ private struct VSCodeVoiceKey: View {
         }
     }
 
-    /// Mirrors the physical Codex microphone contract without sharing its
-    /// backend: hold is push-to-talk, a quick double-tap leaves Claude's native
-    /// dictation latched, and one tap while latched stops it.
+    /// Mirrors the physical Codex microphone contract: hold is push-to-talk, a
+    /// quick double-tap leaves native dictation latched, and one tap while
+    /// latched stops it.
     private func handleNativeVoiceEdge(_ pressing: Bool) {
         if pressing {
             nativePressStart = Date()
@@ -2322,7 +2440,9 @@ private struct VSCodeVoiceKey: View {
     }
 
     private func title(pressed: Bool) -> String {
-        if usesNativeVoice { return pressed ? "LISTENING" : "CLAUDE VOICE" }
+        if usesNativeVoice {
+            return pressed ? "LISTENING" : (surfaceName == "T3 Code" ? "MAC DICTATION" : "CLAUDE VOICE")
+        }
         switch recorder.phase {
         case .idle: return opensExternalPrefill ? "HOLD TO PREFILL" : "HOLD TO TALK"
         case .requestingPermission: return "ALLOW MICROPHONE"
@@ -2816,6 +2936,7 @@ private struct RotaryControl: View {
 
     let onStep: (Bool) -> Void
     let onPress: (Bool) -> Void
+    let onLongPress: () -> Void
 
     @State private var rotation = 42.0
     // Circular (rim) tracking.
@@ -3097,6 +3218,7 @@ private struct RotaryControl: View {
             try? await Task.sleep(nanoseconds: 500_000_000)
             guard !Task.isCancelled, isPressed, !isRotating else { return }
             settingsTick &+= 1
+            onLongPress()
         }
         pendingPressTask = task
     }
@@ -3395,22 +3517,58 @@ private struct DeviceDetailsSheet: View {
     @EnvironmentObject private var peripheral: CodexMicroPeripheral
     @Environment(\.dismiss) private var dismiss
     @AppStorage("codexMicro.codexMicSource") private var codexMicSourceRaw = CodexMicSource.computer.rawValue
-    @State private var t3PairingInput = ""
-    @State private var t3PairingStatus: String?
     @AppStorage("codexMicro.controlSurfaceMode") private var surfaceModeRaw = ControlSurfaceMode.framed.rawValue
     @AppStorage("codexMicro.vscodeLauncher") private var vscodeLauncherRaw = WorkspaceLauncher.claudeExtension.rawValue
     @AppStorage("codexMicro.vscodeCustomCommand") private var vscodeCustomLauncherValue = ""
-    @AppStorage("codexMicro.t3CodeLauncher") private var t3CodeLauncherRaw = WorkspaceLauncher.t3NewSession.rawValue
-    @AppStorage("codexMicro.t3CodeCustomCommand") private var t3CodeCustomLauncherValue = ""
     @AppStorage("codexMicro.claudeCodeLauncher") private var claudeCodeLauncherRaw = WorkspaceLauncher.claudeNewSession.rawValue
     @AppStorage("codexMicro.claudeCodeCustomLink") private var claudeCodeCustomLauncherValue = ""
-    @AppStorage("codexMicro.voiceAutoSend") private var voiceAutoSend = false
+    @AppStorage("codexMicro.codexVoiceAutoSend") private var codexVoiceAutoSend = false
+    @AppStorage("codexMicro.t3VoiceAutoSend") private var t3VoiceAutoSend = false
     @AppStorage("codexMicro.useMacProviderVoice") private var useMacProviderVoice = false
+    @AppStorage(MobileKeyOverrideStore.storageKey) private var mobileKeyOverrides = ""
 
     var body: some View {
         NavigationStack {
             List {
-                Section("Display mode") {
+                Section("Status") {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(connectionTitle)
+                                .font(.body.weight(.medium))
+                            Text(connectionDetail)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    } icon: {
+                        Image(systemName: connectionSymbol)
+                            .foregroundStyle(connectionColor)
+                    }
+
+                    LabeledContent("iPhone battery", value: "\(peripheral.batteryPercent)%")
+                }
+
+                if let issue = peripheral.blockingIssue, !issue.isEmpty {
+                    Section("Action needed") {
+                        Label(issue, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                        Text(connectionLimitation(for: issue))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if !pageOperational {
+                    Section("Connect") {
+                        setupStep(1, "Keep Codex Micro open on this iPhone.")
+                        setupStep(2, "Open Codex Micro from Applications on the Mac.")
+                        if page == .codex {
+                            setupStep(3, "Open ChatGPT. If the Mac companion requests an integration update, restore first and then patch.")
+                        } else {
+                            setupStep(3, "Open T3 Code. The Mac companion reconnects the saved iPhone automatically.")
+                        }
+                    }
+                }
+
+                Section("Appearance") {
                     Picker("Control surface view", selection: $surfaceModeRaw) {
                         ForEach(ControlSurfaceMode.allCases) { mode in
                             Text(mode.title).tag(mode.rawValue)
@@ -3422,32 +3580,29 @@ private struct DeviceDetailsSheet: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+
+                    LabeledContent {
+                        if let brightness = peripheral.lightingBrightness {
+                            Text("\(Int((brightness * 100).rounded()))%")
+                                .monospacedDigit()
+                        } else {
+                            Text("Waiting for Mac")
+                                .foregroundStyle(.secondary)
+                        }
+                    } label: {
+                        Label("Brightness", systemImage: "sun.max.fill")
+                    }
                 }
 
-                // VS Code and T3 Code setup remain persisted but are hidden with
-                // their parked pages.
+                Section("Dictation") {
+                    Toggle(
+                        page == .t3Code
+                            ? "Auto-send after T3 dictation"
+                            : "Auto-send after Codex dictation",
+                        isOn: page == .t3Code ? $t3VoiceAutoSend : $codexVoiceAutoSend
+                    )
 
-                launcherSection(
-                    page: .claudeCode,
-                    launcherRaw: $claudeCodeLauncherRaw,
-                    customValue: $claudeCodeCustomLauncherValue
-                )
-
-                Section("Claude Desktop session pins") {
-                    let pinCount = peripheral.workspaceState(for: ControlPage.claudeCode.hostTarget)
-                        .pins.compactMap { $0 }.count
-                    LabeledContent("Saved exact sessions", value: "\(pinCount) / 6")
-
-                    Text("Open a Claude Code conversation on the Mac and press PIN. The Mac helper identifies that exact conversation automatically; the six agent keys reopen the sessions assigned to them.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Section("Voice prompts") {
-                    Toggle("Auto-send after dictation", isOn: $voiceAutoSend)
-
-                    Text("On the Claude page, the voice key controls Claude Desktop's own dictation using the Mac's current microphone. Hold to talk, tap to stop, or double-tap to latch it.")
+                    Text(dictationDetail)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -3475,151 +3630,22 @@ private struct DeviceDetailsSheet: View {
                     }
                 }
 
-                if page == .t3Code {
-                    t3ConnectionSection
-                }
-
-                if let issue = peripheral.blockingIssue, !issue.isEmpty {
-                    Section {
-                        Label {
-                            Text(issue)
-                        } icon: {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.red)
-                        }
-                    }
-                }
-
-                Section("Connection") {
-                    detailRow("Bluetooth", value: bluetoothState, symbol: "antenna.radiowaves.left.and.right")
-                    detailRow("Services", value: peripheral.publishedServicesReady ? "Ready" : "Starting", symbol: "wave.3.right")
-                    detailRow("Pairing", value: peripheral.isAdvertising ? "Discoverable" : "Not advertising", symbol: "dot.radiowaves.left.and.right")
-                    detailRow(
-                        "Mac transport",
-                        value: peripheral.hostConnected ? "Linked" : "Not linked",
-                        symbol: peripheral.hostConnected ? "link" : "link.slash"
+                Section("Button overrides") {
+                    MobileKeyOverrideBoard(
+                        page: page,
+                        encodedOverrides: $mobileKeyOverrides
                     )
-                    detailRow(
-                        "ChatGPT",
-                        value: peripheral.macConnectionState.isOperational ? "Operational" : peripheral.macConnectionDetail,
-                        symbol: peripheral.macConnectionState.isOperational ? "checkmark.circle.fill" : "hourglass"
-                    )
-                    detailRow("iPhone battery", value: "\(peripheral.batteryPercent)%", symbol: "battery.100percent")
-                }
-
-                if let issue = peripheral.blockingIssue, !issue.isEmpty {
-                    Section("Connection unavailable") {
-                        Text(connectionLimitation(for: issue))
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        Label(
-                            "The hardware face remains available for layout and interaction testing, but controls cannot reach ChatGPT without a macOS HID connection.",
-                            systemImage: "info.circle"
-                        )
-                        .foregroundStyle(.secondary)
-                    }
-                } else if peripheral.publishedServicesReady || peripheral.isAdvertising || peripheral.hostConnected {
-                    Section(peripheral.bridgeMode ? "Connect via the Mac helper" : "Connect to your Mac") {
-                        if peripheral.bridgeMode {
-                            setupStep(1, "Keep Codex Micro Remote open on this iPhone.")
-                            setupStep(2, "On your Mac, build the helper once from the repo: swiftc -O tools/CodexMicroBridge/main.swift tools/CodexMicroBridge/T3Backend.swift -o tools/CodexMicroBridge/codexbridge")
-                            setupStep(3, "One time only, patch ChatGPT so it accepts the helper: ./tools/patch-chatgpt.sh (re-run it after each ChatGPT update).")
-                            setupStep(4, "Run ./tools/CodexMicroBridge/codexbridge — no sudo needed. It links to this iPhone and relays it to ChatGPT.")
-                        } else {
-                            setupStep(1, "Keep Codex Micro Remote open on this iPhone.")
-                            setupStep(2, "On your Mac, open System Settings › Bluetooth and select “Codex Micro.”")
-                            setupStep(3, "Confirm pairing, then open ChatGPT and follow its Codex Micro setup prompt.")
-                        }
-
-                        if peripheral.canControlChatGPT {
-                            Label("Fully connected. ChatGPT and this iPhone completed a two-way data check.", systemImage: "checkmark.circle.fill")
-                                .foregroundStyle(Color(packedRGB: 0x168A55))
-                        } else if peripheral.hostConnected {
-                            Label(peripheral.macConnectionDetail, systemImage: "arrow.triangle.2.circlepath")
-                                .foregroundStyle(.orange)
-                        }
-                    }
-                } else {
-                    Section("Preparing Bluetooth") {
-                        Label("The app is publishing its Bluetooth services. Connection steps appear once they are ready.", systemImage: "hourglass")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Section("Agent lights") {
-                    legendRow(color: .white, title: "Idle")
-                    legendRow(color: Color(packedRGB: 0x304FFE), title: "Thinking")
-                    legendRow(color: Color(packedRGB: 0x00D941), title: "Complete, unread")
-                    legendRow(color: Color(packedRGB: 0xFF8F00), title: "Needs input")
-                    legendRow(color: Color(packedRGB: 0xFF0033), title: "Error")
-                    legendRow(color: Color(packedRGB: 0xA8B0AE), title: "Off · unassigned")
-                }
-
-                Section("Lighting") {
-                    LabeledContent {
-                        if let brightness = peripheral.lightingBrightness {
-                            Text("\(Int((brightness * 100).rounded()))%")
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                        } else {
-                            Text("Waiting for ChatGPT")
-                                .foregroundStyle(.secondary)
-                        }
-                    } label: {
-                        Label("Brightness", systemImage: "sun.max.fill")
-                    }
-
-                    Text("Set brightness in ChatGPT’s Codex Micro settings.")
+                    Text("Tap a key in the preview to keep its Mac action or replace it locally on this iPhone.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
 
-                Section("Key bindings") {
-                    ForEach(CodexMicroLayout.slotOrder, id: \.self) { slotId in
-                        let binding = peripheral.layout.binding(forSlot: slotId)
-                        let descriptor = KeycapCatalog.descriptor(for: binding.keycapId)
-                        LabeledContent {
-                            Text(binding.commandId.map(prettyCommand) ?? descriptor.accessibilityName)
-                                .foregroundStyle(.secondary)
-                        } label: {
-                            Label(descriptor.label, systemImage: descriptor.symbol)
-                        }
-                    }
-                    ForEach(CodexMicroLayout.stickOrder, id: \.self) { direction in
-                        LabeledContent {
-                            Text(prettyCommand(peripheral.layout.action(forDirection: direction)?.commandId))
-                                .foregroundStyle(.secondary)
-                        } label: {
-                            Label("Stick \(direction)", systemImage: "arrow.up.and.down.and.arrow.left.and.right")
-                        }
-                    }
-                }
-
-                Section("Controls") {
-                    controlRow("Agent keys", detail: "Press to switch; double-press within 350 ms to bring ChatGPT forward.")
-                    controlRow("Dial", detail: "Turn to navigate composer controls; press to open; hold 500 ms for settings.")
-                    controlRow("Joystick", detail: "Up Plan · right Forward · down Sidebar · left Back.")
-                    controlRow("Command row", detail: "Fast · Approve · Decline · Continue in new chat.")
-                    controlRow("Microphone", detail: voiceAutoSend
-                        ? "Hold to talk; recognized prompts send automatically. Double-press to latch."
-                        : "Hold to talk; double-press to latch; press again to stop.")
-                    controlRow("Codex", detail: "Sends the current composer message.")
-                    controlRow("Touch sensor", detail: "On this iPhone remote it opens pairing details; macOS manages the Bluetooth channel.")
-                }
-
-                Section("Protocol log") {
-                    if peripheral.logEntries.isEmpty {
-                        ContentUnavailableView(
-                            "No activity yet",
-                            systemImage: "waveform.path",
-                            description: Text("Pair your Mac to see connection and control messages.")
-                        )
-                    } else {
-                        ForEach(Array(peripheral.logEntries.enumerated()), id: \.offset) { _, entry in
-                            Text(entry)
-                                .font(.system(.caption, design: .monospaced))
-                                .textSelection(.enabled)
-                        }
+                Section {
+                    NavigationLink {
+                        AdvancedDeviceSettings(page: page)
+                            .environmentObject(peripheral)
+                    } label: {
+                        Label("Advanced", systemImage: "ellipsis.circle")
                     }
                 }
             }
@@ -3631,6 +3657,61 @@ private struct DeviceDetailsSheet: View {
                 }
             }
         }
+    }
+
+    private var connectionTitle: String {
+        if pageOperational {
+            return page == .codex ? "Fully connected" : "T3 Code connected"
+        }
+        if peripheral.hostConnected { return "Mac connected" }
+        if peripheral.isAdvertising { return "Looking for Mac" }
+        return "Starting Bluetooth"
+    }
+
+    private var dictationDetail: String {
+        if page == .t3Code {
+            return "The microphone key controls macOS Dictation in the T3 composer. Hold to talk, or double-tap to latch."
+        }
+        if selectedCodexMicSource == .iphone {
+            return "The microphone key records on this iPhone and inserts the recognized prompt into Codex."
+        }
+        return "The microphone key controls ChatGPT dictation using the Mac’s selected input device."
+    }
+
+    private var connectionDetail: String {
+        if pageOperational {
+            return page == .codex
+                ? "The Mac and iPhone completed a two-way data check."
+                : "The iPhone, Mac bridge, and T3 Code are exchanging data."
+        }
+        if page == .t3Code,
+           let issue = peripheral.workspaceState(for: page.hostTarget).issue,
+           !issue.isEmpty {
+            return issue
+        }
+        return peripheral.macConnectionDetail
+    }
+
+    private var connectionSymbol: String {
+        if pageOperational { return "checkmark.circle.fill" }
+        if peripheral.hostConnected { return "arrow.triangle.2.circlepath" }
+        return "antenna.radiowaves.left.and.right"
+    }
+
+    private var connectionColor: Color {
+        if pageOperational { return Color(packedRGB: 0x168A55) }
+        if peripheral.hostConnected { return .orange }
+        return .secondary
+    }
+
+    private var pageOperational: Bool {
+        if page == .codex { return peripheral.canControlChatGPT }
+        return peripheral.hostConnected
+            && peripheral.workspaceState(for: page.hostTarget).connected
+    }
+
+    private var selectedVoiceAutoSend: Bool {
+        page == .t3Code ? t3VoiceAutoSend : codexVoiceAutoSend
     }
 
     private var bluetoothState: String {
@@ -3651,67 +3732,6 @@ private struct DeviceDetailsSheet: View {
 
     private var selectedCodexMicSource: CodexMicSource {
         CodexMicSource(rawValue: codexMicSourceRaw) ?? .computer
-    }
-
-    // MARK: T3 Code connection
-
-    @ViewBuilder
-    private var t3ConnectionSection: some View {
-        let state = peripheral.workspaceState(for: ControlPage.t3Code.hostTarget)
-        Section("T3 Code connection") {
-            LabeledContent("Status", value: t3StatusText(state))
-
-            TextField("http://192.168.x.x:3773/pair#token=…", text: $t3PairingInput)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled(true)
-                .keyboardType(.URL)
-                .font(.footnote.monospaced())
-                .lineLimit(1)
-
-            Button {
-                pairT3()
-            } label: {
-                Label(peripheral.t3IsPaired ? "Re-pair" : "Pair", systemImage: "link")
-            }
-            .disabled(t3PairingInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-            if peripheral.t3IsPaired {
-                Button(role: .destructive) {
-                    peripheral.unpairT3()
-                    t3PairingStatus = "Forgotten. Paste a pairing URL to reconnect."
-                } label: {
-                    Label("Forget server", systemImage: "trash")
-                }
-            }
-
-            if let status = t3PairingStatus {
-                Text(status)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Text("On the Mac, start the T3 server so it prints a LAN pairing URL:\n  node apps/server/src/bin.ts serve --host 0.0.0.0 --port 3773\nPaste its “Pairing URL” above. This iPhone then talks straight to T3 over your local network — no Mac bridge involved.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private func t3StatusText(_ state: WorkspaceBridgeState) -> String {
-        if state.connected { return "Connected" }
-        if let issue = state.issue, !issue.isEmpty { return issue }
-        return peripheral.t3IsPaired ? "Connecting…" : "Not paired"
-    }
-
-    private func pairT3() {
-        let url = t3PairingInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !url.isEmpty else { return }
-        t3PairingStatus = "Pairing… watch Status above."
-        // Fire-and-forget: the live poll flips Status to Connected (or surfaces a
-        // pairing issue) via the reactive workspace state.
-        peripheral.pairT3(url)
-        t3PairingInput = ""
     }
 
     @ViewBuilder
@@ -3809,6 +3829,306 @@ private struct DeviceDetailsSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.vertical, 2)
+    }
+}
+
+/// Compact 4×4 map matching the controller. Only the five safe command slots
+/// are interactive; tapping one opens the assignment picker immediately.
+private struct MobileKeyOverrideBoard: View {
+    let page: ControlPage
+    @Binding var encodedOverrides: String
+    @EnvironmentObject private var peripheral: CodexMicroPeripheral
+    @State private var selectedSlot: String?
+
+    var body: some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 6) {
+                decorativeKey("DIAL", symbol: "dial.medium")
+                decorativeKey("1", symbol: "1.circle")
+                decorativeKey("2", symbol: "2.circle")
+                decorativeKey("STICK", symbol: "circle.grid.cross")
+            }
+            HStack(spacing: 6) {
+                decorativeKey("3", symbol: "3.circle")
+                decorativeKey("4", symbol: "4.circle")
+                decorativeKey("5", symbol: "5.circle")
+                decorativeKey("6", symbol: "6.circle")
+            }
+            HStack(spacing: 6) {
+                ForEach(Array(MobileKeyOverrideStore.assignableSlots.prefix(4)), id: \.self) {
+                    overrideKey($0)
+                }
+            }
+            HStack(spacing: 6) {
+                decorativeKey("TOUCH", symbol: "hand.tap")
+                decorativeKey("MIC", symbol: "mic.fill")
+                decorativeKey("", symbol: nil)
+                overrideKey("ACT12")
+            }
+        }
+        .confirmationDialog(
+            selectedSlot.map { "Assign \(hostDescriptor(for: $0).label)" } ?? "Assign key",
+            isPresented: Binding(
+                get: { selectedSlot != nil },
+                set: { if !$0 { selectedSlot = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let selectedSlot {
+                ForEach(MobileKeyOverride.allCases) { value in
+                    Button(
+                        currentOverride(for: selectedSlot) == value
+                            ? "✓ \(value.title)"
+                            : value.title
+                    ) {
+                        encodedOverrides = MobileKeyOverrideStore.setting(
+                            value,
+                            for: selectedSlot,
+                            page: page,
+                            encoded: encodedOverrides
+                        )
+                        self.selectedSlot = nil
+                    }
+                }
+                Button("Cancel", role: .cancel) {
+                    self.selectedSlot = nil
+                }
+            }
+        } message: {
+            Text("Follow Mac keeps the synced \(page.surfaceName) action. Local overrides affect only this iPhone.")
+        }
+    }
+
+    private func overrideKey(_ slot: String) -> some View {
+        let value = currentOverride(for: slot)
+        let host = hostDescriptor(for: slot)
+        let label = value == .host
+            ? host.label
+            : (value == .clearComposer ? "CLEAR" : "SET")
+        let symbol = value == .host ? host.symbol : value.symbol
+        let isOverridden = value != .host
+
+        return Button {
+            selectedSlot = slot
+        } label: {
+            VStack(spacing: 3) {
+                Image(systemName: symbol)
+                    .font(.caption.weight(.semibold))
+                Text(label)
+                    .font(.system(size: 8, weight: .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .foregroundStyle(isOverridden ? Color.white : Color.primary)
+            .frame(maxWidth: .infinity)
+            .frame(height: 48)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isOverridden ? Color.accentColor : Color.primary.opacity(0.07))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(
+                        isOverridden ? Color.accentColor : Color.primary.opacity(0.10),
+                        lineWidth: isOverridden ? 2 : 1
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(host.accessibilityName): \(value.title)")
+        .accessibilityHint("Opens assignment options")
+    }
+
+    private func decorativeKey(_ label: String, symbol: String?) -> some View {
+        VStack(spacing: 3) {
+            if let symbol {
+                Image(systemName: symbol)
+                    .font(.caption)
+            }
+            if !label.isEmpty {
+                Text(label)
+                    .font(.system(size: 8, weight: .bold))
+            }
+        }
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity)
+        .frame(height: 48)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.primary.opacity(0.035))
+        )
+        .accessibilityHidden(true)
+    }
+
+    private func currentOverride(for slot: String) -> MobileKeyOverride {
+        MobileKeyOverrideStore.override(
+            for: slot,
+            page: page,
+            encoded: encodedOverrides
+        )
+    }
+
+    private func hostDescriptor(for slot: String) -> KeycapDescriptor {
+        if page == .t3Code {
+            switch slot {
+            case "ACT06":
+                return .init(label: "FAST", symbol: "bolt.fill", accent: .blue, accessibilityName: "Fast mode", hint: "Toggles fast mode")
+            case "ACT07":
+                return .init(label: "NEW", symbol: "square.and.pencil", accent: .green, accessibilityName: "New chat", hint: "Starts a new chat")
+            case "ACT08":
+                return .init(label: "PIN", symbol: "pin.fill", accent: .purple, accessibilityName: "Pin", hint: "Pins the selected chat")
+            case "ACT09":
+                return .init(label: "CLEAR", symbol: "trash", accent: .gray, accessibilityName: "Clear message", hint: "Clears the composer")
+            default:
+                return .init(label: "SEND", symbol: "arrow.up", accent: .blue, accessibilityName: "Send", hint: "Sends the message")
+            }
+        }
+
+        let binding = peripheral.layout.binding(forSlot: slot)
+        return KeycapCatalog.descriptor(for: binding.keycapId)
+    }
+}
+
+private struct AdvancedDeviceSettings: View {
+    let page: ControlPage
+    @EnvironmentObject private var peripheral: CodexMicroPeripheral
+
+    var body: some View {
+        List {
+            Section("Connection details") {
+                detailRow("Bluetooth", value: bluetoothState, symbol: "antenna.radiowaves.left.and.right")
+                detailRow(
+                    "Services",
+                    value: peripheral.publishedServicesReady ? "Ready" : "Starting",
+                    symbol: "wave.3.right"
+                )
+                detailRow(
+                    "Pairing",
+                    value: peripheral.isAdvertising ? "Discoverable" : "Not advertising",
+                    symbol: "dot.radiowaves.left.and.right"
+                )
+                detailRow(
+                    "Mac transport",
+                    value: peripheral.hostConnected ? "Linked" : "Not linked",
+                    symbol: peripheral.hostConnected ? "link" : "link.slash"
+                )
+                detailRow(
+                    page.surfaceName,
+                    value: page == .codex
+                        ? (peripheral.macConnectionState.isOperational
+                            ? "Operational"
+                            : peripheral.macConnectionDetail)
+                        : (peripheral.workspaceState(for: page.hostTarget).connected
+                            ? "Connected"
+                            : "Waiting"),
+                    symbol: "desktopcomputer"
+                )
+            }
+
+            Section("Synced key bindings") {
+                if page == .codex {
+                    ForEach(CodexMicroLayout.slotOrder, id: \.self) { slotId in
+                        let binding = peripheral.layout.binding(forSlot: slotId)
+                        let descriptor = KeycapCatalog.descriptor(for: binding.keycapId)
+                        LabeledContent {
+                            Text(binding.commandId.map(prettyCommand) ?? descriptor.accessibilityName)
+                                .foregroundStyle(.secondary)
+                        } label: {
+                            Label(descriptor.label, systemImage: descriptor.symbol)
+                        }
+                    }
+                } else {
+                    ForEach(
+                        peripheral.workspaceState(for: page.hostTarget).actionKeys,
+                        id: \.key
+                    ) { action in
+                        LabeledContent {
+                            Text(action.action.capitalized)
+                                .foregroundStyle(.secondary)
+                        } label: {
+                            Label(action.label, systemImage: action.symbol)
+                        }
+                    }
+                }
+            }
+
+            Section("Control reference") {
+                referenceRow("Agent keys", detail: "Press to switch. Double-press to bring the selected Mac app forward.")
+                referenceRow("Dial", detail: "Turn to change the focused composer control. Press to open it.")
+                referenceRow("Joystick", detail: "Only left toggles the sidebar on T3 Code; other directions follow their synced actions.")
+                referenceRow("Microphone", detail: "Hold to talk or double-press to latch.")
+            }
+
+            Section("Agent light guide") {
+                legendRow(color: .white, title: "Idle")
+                legendRow(color: Color(packedRGB: 0x304FFE), title: "Selected or thinking")
+                legendRow(color: Color(packedRGB: 0x00D941), title: "Complete, unread")
+                legendRow(color: Color(packedRGB: 0xFF8F00), title: "Needs input")
+                legendRow(color: Color(packedRGB: 0xFF0033), title: "Error")
+                legendRow(color: Color(packedRGB: 0xA8B0AE), title: "Off or unassigned")
+            }
+
+            Section("Live protocol log") {
+                if peripheral.logEntries.isEmpty {
+                    ContentUnavailableView(
+                        "No activity yet",
+                        systemImage: "waveform.path",
+                        description: Text("Connection and control messages appear here.")
+                    )
+                } else {
+                    ForEach(Array(peripheral.logEntries.enumerated()), id: \.offset) { _, entry in
+                        Text(entry)
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                    }
+                }
+            }
+        }
+        .navigationTitle("Advanced")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var bluetoothState: String {
+        switch peripheral.managerState {
+        case .unknown: return "Starting"
+        case .resetting: return "Resetting"
+        case .unsupported: return "Unsupported"
+        case .unauthorized: return "Permission required"
+        case .poweredOff: return "Off"
+        case .poweredOn: return "On"
+        @unknown default: return "Unavailable"
+        }
+    }
+
+    private func detailRow(_ title: String, value: String, symbol: String) -> some View {
+        LabeledContent {
+            Text(value)
+                .foregroundStyle(.secondary)
+        } label: {
+            Label(title, systemImage: symbol)
+        }
+    }
+
+    private func referenceRow(_ title: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.body.weight(.medium))
+            Text(detail)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func legendRow(color: Color, title: String) -> some View {
+        Label {
+            Text(title)
+        } icon: {
+            Circle()
+                .fill(color)
+                .overlay(Circle().stroke(Color.primary.opacity(0.18), lineWidth: 1))
+                .frame(width: 16, height: 16)
+        }
     }
 }
 

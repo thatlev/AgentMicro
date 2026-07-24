@@ -1,15 +1,11 @@
 //
 //  CodexMicroPeripheral.swift
-//  Experimental BLE HOGP peripheral for the Work Louder Codex Micro protocol.
+//  Bluetooth transport for the Codex Micro Remote protocol.
 //
-//  A compatible host requires a real OS-level HID device. Public iOS
-//  CoreBluetooth rejects app-published HID services (0x1812), so when that
-//  happens this peripheral falls back to a custom GATT "bridge" service
-//  carrying the same 63-byte reports. The Mac-side helper
-//  (tools/CodexMicroBridge, run with sudo) subscribes to the bridge and
-//  re-exposes the stream locally as a virtual Codex Micro HID device.
-//  Unrecoverable failures are surfaced through `blockingIssue`; an
-//  incomplete profile is never advertised as ready.
+//  The iPhone publishes only an app-owned GATT service. The companion macOS
+//  app consumes that service and performs the local ChatGPT integration.
+//  Unrecoverable failures are surfaced through `blockingIssue`; an incomplete
+//  profile is never advertised as ready.
 //
 //  Reverse-engineered protocol notes: ../../../docs/codex-micro-protocol.md
 //
@@ -86,6 +82,14 @@ struct VSCodeTarget: Identifiable, Equatable {
     var nativeVoice: Bool
 }
 
+struct WorkspaceActionKey: Equatable {
+    var key: String
+    var action: String
+    var label: String
+    var symbol: String
+    var accent: UInt32
+}
+
 /// One completely isolated non-Codex control surface. The bridge uses the
 /// surface key (`vscode`, `t3code`, or `claude-desktop`) on every request and
 /// response, so a delayed transcription can never land on whichever page the
@@ -100,6 +104,7 @@ struct WorkspaceBridgeState: Equatable {
     /// when macOS denied Accessibility control.
     var nativeVoiceActive = false
     var slots = Array(repeating: SlotLight(), count: 6)
+    var actionKeys: [WorkspaceActionKey] = []
     var issue: String?
 }
 
@@ -204,7 +209,14 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
     /// `v.oai.rgbcfg`. Nil means the host has not reported its setting yet.
     /// Brightness is configured only in ChatGPT's Codex Micro settings.
     @Published private(set) var lightingBrightness: Double?
+    @Published private(set) var autoDimSeconds: TimeInterval = 180
+    @Published private(set) var isLightingDimmed = false
     private var hasSyncedDesktopBrightness = false
+    private var autoDimTimer: Timer?
+
+    var effectiveLightingBrightness: Double {
+        isLightingDimmed ? 0 : (lightingBrightness ?? 1)
+    }
 
     var canControlChatGPT: Bool {
         hostConnected && macConnectionState.isOperational
@@ -247,18 +259,18 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
     private var pm: CBPeripheralManager!
     private var inputChar: CBMutableCharacteristic!
     private var outputChar: CBMutableCharacteristic!
-    private var batteryChar: CBMutableCharacteristic!
-    private var protocolModeChar: CBMutableCharacteristic!
-    private var controlPointChar: CBMutableCharacteristic!
     private var servicesToPublish: [CBMutableService] = []
     private var servicePublishIndex = 0
     private var inputSubscribers: [UUID: CBCentral] = [:]
     private var pendingReports: [Data] = []
-    private var rpcBuffer = Data()
-    private var configBuffer = Data()
+    /// More than one production Mac client may subscribe at once: the Codex
+    /// menu app for ChatGPT and the custom T3 desktop build for T3 Code. Keep
+    /// fragmented host messages isolated by central so their writes can never
+    /// splice into one another.
+    private var rpcBuffers: [UUID: Data] = [:]
+    private var configBuffers: [UUID: Data] = [:]
     private var lastInputReport = Data(count: 63)
     private var lastOutputReport = Data(count: 63)
-    private var protocolMode: UInt8 = 0x01
     private var isSuspended = false
     private var foregroundHeartbeat: Timer?
     private let foregroundHeartbeatInterval: TimeInterval = 8
@@ -270,11 +282,9 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
     /// physical Codex rendering; page-specific UI reads `workspaceStates`.
     private var chatgptSlots = Array(repeating: SlotLight(), count: 6)
 
-    /// The T3 Code page does NOT ride the Mac bridge. It talks straight to the
-    /// open-source T3 server over the LAN through this in-app client, which
-    /// republishes its snapshots into `workspaceStates["t3code"]` exactly like a
-    /// bridge `workspace-state` frame would. Fully isolated from every other
-    /// surface — no BLE, no channel 5, no ChatGPT wire.
+    /// Retained for migration from the earlier LAN-paired T3 experiment. The
+    /// production T3 surface is now owned by the packaged T3 desktop app over
+    /// the same private BLE service, and this controller stays inactive.
     let t3 = T3DirectController()
 
     private let fwVersion = "0.1.0-ios-remote"
@@ -285,24 +295,16 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
     /// for the previous process, so the Mac helper can refresh only stale links.
     private let advertisingSession = UInt16.random(in: UInt16.min...UInt16.max)
 
-    /// Custom GATT bridge published when iOS refuses the real HID service.
-    /// tools/CodexMicroBridge on the Mac subscribes to these characteristics
-    /// and re-exposes the report stream as a local virtual HID device.
+    /// App-owned GATT transport. The Codex Micro macOS companion subscribes to
+    /// these characteristics and relays the report stream to its local ChatGPT
+    /// integration.
     static let bridgeServiceUUID = CBUUID(string: "C0DE0001-6E10-4C0D-A5A5-C0DEB1D6E001")
     static let bridgeInputUUID = CBUUID(string: "C0DE0002-6E10-4C0D-A5A5-C0DEB1D6E001")
     static let bridgeOutputUUID = CBUUID(string: "C0DE0003-6E10-4C0D-A5A5-C0DEB1D6E001")
     private static let logger = Logger(
-        subsystem: Bundle.main.bundleIdentifier ?? "com.sidepulse.codexmicroremote",
+        subsystem: Bundle.main.bundleIdentifier ?? "io.github.thislev.codexmicroremote",
         category: "BLEPeripheral"
     )
-
-    // HID report map: vendor-defined page 0xFF00, report ID 6, 63-byte in/out.
-    private let reportMap: [UInt8] = [
-        0x06, 0x00, 0xFF, 0x09, 0x01, 0xA1, 0x01, 0x85, 0x06,
-        0x15, 0x00, 0x26, 0xFF, 0x00, 0x75, 0x08, 0x95, 0x3F,
-        0x09, 0x01, 0x81, 0x02, 0x95, 0x3F, 0x09, 0x02, 0x91,
-        0x02, 0xC0,
-    ]
 
     override init() {
         super.init()
@@ -341,73 +343,7 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
 
     // MARK: GATT
 
-    private func buildServices() {
-        let encRead: CBAttributePermissions = [.readable, .readEncryptionRequired]
-        let encWrite: CBAttributePermissions = [.writeable, .writeEncryptionRequired]
-        let encReadWrite: CBAttributePermissions = [
-            .readable, .readEncryptionRequired, .writeable, .writeEncryptionRequired,
-        ]
-
-        pm.stopAdvertising()
-        isAdvertising = false
-        publishedServicesReady = false
-        blockingIssue = nil
-        inputSubscribers.removeAll()
-        hostConnected = false
-        setMacConnection(.starting, detail: "Publishing Bluetooth services")
-        pendingReports.removeAll()
-        rpcBuffer.removeAll()
-        servicePublishIndex = 0
-        bridgeMode = false
-
-        let hidInfo = CBMutableCharacteristic(type: CBUUID(string: "2A4A"), properties: .read,
-                                              value: Data([0x11, 0x01, 0x00, 0x01]), permissions: encRead)
-        let mapChar = CBMutableCharacteristic(type: CBUUID(string: "2A4B"), properties: .read,
-                                              value: Data(reportMap), permissions: encRead)
-        controlPointChar = CBMutableCharacteristic(
-            type: CBUUID(string: "2A4C"), properties: .writeWithoutResponse,
-            value: nil, permissions: encWrite
-        )
-        protocolModeChar = CBMutableCharacteristic(
-            type: CBUUID(string: "2A4E"), properties: [.read, .writeWithoutResponse],
-            value: nil, permissions: encReadWrite
-        )
-
-        inputChar = CBMutableCharacteristic(type: CBUUID(string: "2A4D"),
-                                            properties: [.read, .notify, .notifyEncryptionRequired], value: nil,
-                                            permissions: encRead)
-        outputChar = CBMutableCharacteristic(type: CBUUID(string: "2A4D"),
-                                             properties: [.read, .write, .writeWithoutResponse], value: nil,
-                                             permissions: encReadWrite)
-        inputChar.descriptors = [CBMutableDescriptor(type: CBUUID(string: "2908"), value: Data([6, 0x01]))]
-        outputChar.descriptors = [CBMutableDescriptor(type: CBUUID(string: "2908"), value: Data([6, 0x02]))]
-
-        let hid = CBMutableService(type: CBUUID(string: "1812"), primary: true)
-        hid.characteristics = [hidInfo, mapChar, controlPointChar, protocolModeChar, inputChar, outputChar]
-
-        batteryChar = CBMutableCharacteristic(type: CBUUID(string: "2A19"),
-                                              properties: [.read, .notify], value: nil, permissions: .readable)
-        let battery = CBMutableService(type: CBUUID(string: "180F"), primary: true)
-        battery.characteristics = [batteryChar]
-
-        let manufacturer = CBMutableCharacteristic(type: CBUUID(string: "2A29"), properties: .read,
-                                                   value: "Work Louder".data(using: .utf8), permissions: .readable)
-        // PnP ID: source 0x02, VID 0x303A, PID 0x8360, release 0x0101 (all little-endian)
-        let pnp = CBMutableCharacteristic(type: CBUUID(string: "2A50"), properties: .read,
-                                          value: Data([0x02, 0x3A, 0x30, 0x60, 0x83, 0x01, 0x01]),
-                                          permissions: .readable)
-        let dis = CBMutableService(type: CBUUID(string: "180A"), primary: true)
-        dis.characteristics = [manufacturer, pnp]
-
-        // Publish serially. Advertising before every required service has completed
-        // registration can make the UI claim success with an incomplete GATT table.
-        servicesToPublish = [hid, battery, dis]
-        publishNextService()
-    }
-
-    /// Fallback transport: a custom GATT service iOS will accept. The Mac
-    /// helper (tools/CodexMicroBridge, run with sudo) subscribes to it and
-    /// republishes the reports as a local virtual Codex Micro HID device.
+    /// Publish the custom bridge service consumed by the menu-bar app.
     private func buildBridgeServices() {
         pm.stopAdvertising()
         isAdvertising = false
@@ -415,18 +351,24 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
         blockingIssue = nil
         inputSubscribers.removeAll()
         hostConnected = false
-        setMacConnection(.starting, detail: "Starting the Mac helper bridge")
+        setMacConnection(.starting, detail: "Starting Mac connection")
         pendingReports.removeAll()
-        rpcBuffer.removeAll()
+        rpcBuffers.removeAll()
+        configBuffers.removeAll()
         servicePublishIndex = 0
         bridgeMode = true
 
         inputChar = CBMutableCharacteristic(type: Self.bridgeInputUUID,
-                                            properties: [.read, .notify], value: nil,
-                                            permissions: .readable)
+                                            properties: [.read, .notify, .notifyEncryptionRequired], value: nil,
+                                            permissions: [.readable, .readEncryptionRequired])
         outputChar = CBMutableCharacteristic(type: Self.bridgeOutputUUID,
                                              properties: [.read, .write, .writeWithoutResponse], value: nil,
-                                             permissions: [.readable, .writeable])
+                                             permissions: [
+                                                .readable,
+                                                .readEncryptionRequired,
+                                                .writeable,
+                                                .writeEncryptionRequired,
+                                             ])
         let bridge = CBMutableService(type: Self.bridgeServiceUUID, primary: true)
         bridge.characteristics = [inputChar, outputChar]
 
@@ -454,7 +396,7 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
 
     private func startAdvertising() {
         guard publishedServicesReady, !pm.isAdvertising else { return }
-        setMacConnection(.waitingForMac, detail: "Waiting for the Mac helper")
+        setMacConnection(.waitingForMac, detail: "Waiting for Mac")
         let sessionData = Data([
             0x43, 0x4D, // "CM"
             UInt8(advertisingSession & 0x00FF),
@@ -462,9 +404,7 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
         ])
         pm.startAdvertising([
             CBAdvertisementDataLocalNameKey: "Codex Micro",
-            CBAdvertisementDataServiceUUIDsKey: [
-                bridgeMode ? Self.bridgeServiceUUID : CBUUID(string: "1812")
-            ],
+            CBAdvertisementDataServiceUUIDsKey: [Self.bridgeServiceUUID],
             CBAdvertisementDataManufacturerDataKey: sessionData,
         ])
     }
@@ -472,16 +412,11 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
     private func isInputReportCharacteristic(_ characteristic: CBCharacteristic) -> Bool {
         characteristic === inputChar
             || characteristic.uuid == Self.bridgeInputUUID
-            || (characteristic.uuid == CBUUID(string: "2A4D")
-                && characteristic.properties.contains(.notify)
-                && !characteristic.properties.contains(.write))
     }
 
     private func isOutputReportCharacteristic(_ characteristic: CBCharacteristic) -> Bool {
         characteristic === outputChar
             || characteristic.uuid == Self.bridgeOutputUUID
-            || (characteristic.uuid == CBUUID(string: "2A4D")
-                && characteristic.properties.contains(.write))
     }
 
     func stop() {
@@ -491,7 +426,8 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
         servicePublishIndex = 0
         inputSubscribers.removeAll()
         pendingReports.removeAll()
-        rpcBuffer.removeAll()
+        rpcBuffers.removeAll()
+        configBuffers.removeAll()
         isAdvertising = false
         publishedServicesReady = false
         hostConnected = false
@@ -503,6 +439,32 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
     private func refreshBattery() {
         let level = UIDevice.current.batteryLevel
         batteryPercent = level < 0 ? 100 : Int((level * 100).rounded())
+    }
+
+    private func sendDeviceStatus() {
+        guard hostConnected else { return }
+        sendBridgeControl([
+            "cmd": "deviceStatus",
+            "surface": "t3code",
+            "battery": batteryPercent,
+            "charging": UIDevice.current.batteryState == .charging
+                || UIDevice.current.batteryState == .full,
+        ])
+    }
+
+    private func noteLightingActivity() {
+        autoDimTimer?.invalidate()
+        autoDimTimer = nil
+        isLightingDimmed = false
+        guard autoDimSeconds > 0 else { return }
+        let timer = Timer(timeInterval: autoDimSeconds, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.isLightingDimmed = true
+                self?.autoDimTimer = nil
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        autoDimTimer = timer
     }
 
     // MARK: Device -> host events
@@ -527,7 +489,7 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
     }
 
     /// Clear the ChatGPT composer. The Codex Micro protocol has no composer-clear
-    /// command, so this rides a SidePulse-only control channel (4) that the Mac
+    /// command, so this rides a CodexMicro-only control channel (4) that the Mac
     /// shim consumes to run a host-side action; it is never forwarded to ChatGPT's
     /// device layer. See docs/codex-micro-protocol.md §7.
     func clearComposer() {
@@ -536,7 +498,7 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
 
     /// Inserts dictated/typed text straight into ChatGPT's composer. Like
     /// `clearComposer`, the Codex Micro protocol has no insert command, so this
-    /// rides the SidePulse-only shim control channel (4): the Mac shim runs
+    /// rides the CodexMicro-only shim control channel (4): the Mac shim runs
     /// `webContents.insertText` inside ChatGPT's own renderer — no macOS
     /// Accessibility permission and no keystroke simulation. Used when the Codex
     /// microphone is set to "This iPhone": the phone records + transcribes
@@ -596,15 +558,7 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
         slots = target == "chatgpt"
             ? chatgptSlots
             : workspaceState(for: target).slots
-        // The T3 page is a direct LAN client, not a bridge surface: switching to
-        // it starts the in-app poll loop and never announces itself on channel 5.
-        // Switching away pauses that loop to save battery.
-        if target == "t3code" {
-            t3.activate()
-            return
-        }
-        t3.deactivate()
-        sendBridgeControl(["cmd": "setControlTarget", "target": target])
+        sendBridgeControl(["cmd": "setControlTarget", "target": target, "surface": target])
     }
 
     /// A VS Code-page key event, carried on the private bridge channel (5)
@@ -614,10 +568,7 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
     /// affected by anything the VS Code page does. The desktop replays these as
     /// the same `v.oai.hid` events its VS Code controller already understands.
     func sendVSCodeKey(_ key: String, action: Int, agent: Int? = nil, surface: String = "vscode") {
-        if surface == "t3code" {
-            t3.handleKey(key, action: action, agent: agent)
-            return
-        }
+        if action != 0 { noteLightingActivity() }
         var object: [String: Any] = [
             "cmd": "vscodeKey", "surface": surface, "k": key, "act": action,
         ]
@@ -626,14 +577,7 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
     }
 
     func createVSCodeSession(kind: String, value: String, label: String, surface: String = "vscode") {
-        if surface == "t3code" {
-            // NEW opens a fresh chat in the T3 desktop app on macOS and brings it
-            // to the front, via the desktop app's registered `t3code://` handler
-            // (relayed through the Mac helper). `t3code://app/` lands the desktop
-            // app straight in a new draft chat.
-            openMacURL("t3code://app/", surface: "t3code")
-            return
-        }
+        noteLightingActivity()
         sendBridgeControl([
             "cmd": "vscodeNew", "surface": surface,
             "kind": kind, "value": value, "label": label,
@@ -647,10 +591,7 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
         targetLabel: String? = nil,
         surface: String = "vscode"
     ) {
-        if surface == "t3code" {
-            t3.togglePin(targetID: targetID)
-            return
-        }
+        noteLightingActivity()
         var object: [String: Any] = ["cmd": "vscodeTogglePin", "surface": surface]
         if let targetID, !targetID.isEmpty { object["target"] = targetID }
         if let targetLabel, !targetLabel.isEmpty { object["label"] = targetLabel }
@@ -667,11 +608,7 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
         surface: String = "vscode"
     ) {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        if surface == "t3code" {
-            // Dictated/typed text becomes a turn on the selected T3 thread.
-            t3.sendPrompt(text, to: targetID)
-            return
-        }
+        noteLightingActivity()
         var command: [String: Any] = [
             "cmd": "vscodeInsert",
             "surface": surface,
@@ -685,14 +622,17 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
     /// Starts or stops provider-native voice capture for one concrete editor
     /// target. The extension rejects this command for terminals, file tabs,
     /// and providers that do not expose a voice API.
-    func setVSCodeNativeVoice(_ active: Bool, targetID: String? = nil, surface: String = "vscode") {
-        // T3 dictation is delivered as transcribed text (insertVSCodePrompt); it
-        // has no provider-native push-to-talk to arm.
-        guard surface != "t3code" else { return }
+    func setVSCodeNativeVoice(
+        _ active: Bool,
+        targetID: String? = nil,
+        surface: String = "vscode",
+        autoSend: Bool = false
+    ) {
         var command: [String: Any] = [
             "cmd": "vscodeVoice",
             "surface": surface,
             "active": active,
+            "autoSend": autoSend,
         ]
         if let targetID, !targetID.isEmpty { command["target"] = targetID }
         sendBridgeControl(command)
@@ -704,8 +644,6 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
     /// Best-effort: the bridge activates the app by the bundle id the extension
     /// reported for that target, falling back to the current selection's app.
     func raiseWorkspaceApp(surface: String = "vscode", targetID: String? = nil) {
-        // A local T3 server has no front-facing desktop app to raise.
-        guard surface != "t3code" else { return }
         var object: [String: Any] = ["cmd": "vscodeRaise", "surface": surface]
         if let targetID, !targetID.isEmpty { object["target"] = targetID }
         sendBridgeControl(object)
@@ -739,9 +677,8 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
     func applicationDidBecomeActive() {
         foregroundRenderGeneration &+= 1
         refreshBattery()
-        // Resume the T3 poll loop if the user is on that page (it was paused on
-        // resign so it never polls the LAN from the background).
-        if desiredControlTarget == "t3code" { t3.activate() }
+        sendDeviceStatus()
+        noteLightingActivity()
         requestLatestHostState()
         startForegroundHeartbeat()
     }
@@ -750,22 +687,18 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
     /// background (where the BLE link is torn down anyway).
     func applicationWillResignActive() {
         stopForegroundHeartbeat()
-        t3.deactivate()
+        autoDimTimer?.invalidate()
+        autoDimTimer = nil
     }
 
     private func requestLatestHostState() {
-        // The T3 page is off-bridge: refresh its direct client instead of
-        // asking the Mac helper to replay a surface it no longer proxies.
-        if desiredControlTarget == "t3code" {
-            t3.refresh()
-            return
-        }
         // Include the durable page choice in every refresh. A BLE notification
         // can be lost at the exact subscription boundary; the foreground
         // heartbeat therefore also acts as an idempotent routing handshake.
         sendBridgeControl([
             "cmd": "refreshState",
             "target": desiredControlTarget,
+            "surface": desiredControlTarget,
         ])
     }
 
@@ -773,13 +706,15 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
     /// ChatGPT's hardware lighting has an auto-off timer and a single dropped
     /// host frame would otherwise leave the LEDs frozen until the next touch.
     /// A light heartbeat re-requests the latest host state (ChatGPT replays its
-    /// cached agent status; the VSCode bridge re-emits SidePulse status), so the
+    /// cached agent status; the VSCode bridge re-emits CodexMicro status), so the
     /// LEDs always converge back to the truth without faking any key press.
     private func startForegroundHeartbeat() {
         stopForegroundHeartbeat()
         let timer = Timer(timeInterval: foregroundHeartbeatInterval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, self.hostConnected, !self.isSuspended else { return }
+                self.refreshBattery()
+                self.sendDeviceStatus()
                 self.requestLatestHostState()
             }
         }
@@ -793,14 +728,19 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
         foregroundHeartbeat = nil
     }
 
-    /// Send a SidePulse-only control message to the Mac shim on channel 4 (not
+    /// Send a CodexMicro-only control message to the Mac shim on channel 4 (not
     /// part of the Codex Micro wire protocol).
     private func sendControl(_ object: [String: Any]) {
         guard canControlChatGPT else {
             log("ignored control request: ChatGPT connection is not operational")
             return
         }
-        sendPrivateMessage(object, channel: 4, description: "control")
+        sendPrivateMessage(
+            object,
+            channel: 4,
+            description: "control",
+            terminateWithNewline: true
+        )
     }
 
     /// Channel 5 terminates in CodexMicroBridge and never reaches ChatGPT. It
@@ -855,7 +795,8 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
         }
         pendingReports.append(contentsOf: reports)
         flushPendingReports()
-        log("dev→host(\(description)) \(String(data: payload, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")")
+        let command = object["cmd"] as? String ?? "unknown"
+        log("dev→host(private) channel=\(channel) command=\(command) type=\(description) bytes=\(payload.count)")
     }
 
     /// Send a `v.oai.rad` joystick event. angle in turns (right 0, down .25, left .5, up .75).
@@ -923,7 +864,7 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
 
     // MARK: Host -> device (output report writes)
 
-    private func handleOutputReport(_ data: Data) {
+    private func handleOutputReport(_ data: Data, centralID: UUID) {
         // GATT values omit the report ID. Accept a 64-byte HIDAPI-style value too
         // for diagnostics, but rebase the Data indices after removing its prefix.
         var body = Data(data)
@@ -934,7 +875,7 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
         }
         let channel = body[body.startIndex]
         if channel == 3 {
-            handleConfigReport(body)
+            handleConfigReport(body, centralID: centralID)
             return
         }
         guard channel == 2 else {
@@ -949,6 +890,7 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
         }
         let fragment = body.subdata(in: 2..<(2 + len))
         let fragmentText = String(data: fragment, encoding: .utf8)
+        var rpcBuffer = rpcBuffers[centralID] ?? Data()
         if !rpcBuffer.isEmpty,
            (fragmentText?.hasPrefix("{\"method\"") == true || fragmentText?.hasPrefix("{\"m\"") == true) {
             rpcBuffer.removeAll() // resync after a dropped fragmented request
@@ -956,7 +898,7 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
         rpcBuffer.append(fragment)
         guard rpcBuffer.count <= maxRPCBufferBytes else {
             log("discarded oversized RPC frame")
-            rpcBuffer.removeAll()
+            rpcBuffers.removeValue(forKey: centralID)
             return
         }
 
@@ -979,6 +921,11 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
             log("host→dev \(String(data: complete, encoding: .utf8) ?? "<non-UTF-8 JSON>")")
             handleRpc(object)
         }
+        if rpcBuffer.isEmpty {
+            rpcBuffers.removeValue(forKey: centralID)
+        } else {
+            rpcBuffers[centralID] = rpcBuffer
+        }
     }
 
     private func processRpcJSON(_ data: Data) {
@@ -992,7 +939,7 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
 
     /// Channel-3 settings reports from the Mac bridge (not part of the real
     /// device protocol): chunked bare JSON carrying layout and brightness.
-    private func handleConfigReport(_ body: Data) {
+    private func handleConfigReport(_ body: Data, centralID: UUID) {
         let lengthIndex = body.index(after: body.startIndex)
         let len = Int(body[lengthIndex])
         guard len <= 61, body.count >= 2 + len else {
@@ -1000,6 +947,7 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
             return
         }
         let fragment = body.subdata(in: 2..<(2 + len))
+        var configBuffer = configBuffers[centralID] ?? Data()
         if !configBuffer.isEmpty,
            String(data: fragment, encoding: .utf8)?.hasPrefix("{\"type\"") == true {
             configBuffer.removeAll() // resync after a dropped fragmented message
@@ -1007,13 +955,14 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
         configBuffer.append(fragment)
         guard configBuffer.count <= maxRPCBufferBytes else {
             log("discarded oversized config frame")
-            configBuffer.removeAll()
+            configBuffers.removeValue(forKey: centralID)
             return
         }
         guard let object = try? JSONSerialization.jsonObject(with: configBuffer) as? [String: Any] else {
+            configBuffers[centralID] = configBuffer
             return // wait for more fragments
         }
-        configBuffer.removeAll()
+        configBuffers.removeValue(forKey: centralID)
         switch object["type"] as? String {
         case "codex-micro-layout":
             applyLayout(object)
@@ -1063,6 +1012,7 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
 
     private func applyWorkspaceState(_ object: [String: Any], surface: String) {
         var state = workspaceState(for: surface)
+        let previousSlots = state.slots
         state.connected = object["connected"] as? Bool ?? false
         state.selectedTargetID = object["selected"] as? String
         state.nativeVoiceActive = object["nativeVoiceActive"] as? Bool ?? false
@@ -1093,9 +1043,39 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
         if let values = object["slots"] as? [[String: Any]] {
             state.slots = applyingSlotUpdates(values, to: state.slots)
         }
+        if let controls = object["controls"] as? [String: Any],
+           let values = controls["actionKeys"] as? [[String: Any]] {
+            state.actionKeys = values.prefix(4).compactMap { entry in
+                guard let key = entry["key"] as? String,
+                      let action = entry["action"] as? String,
+                      let label = entry["label"] as? String,
+                      let symbol = entry["symbol"] as? String,
+                      let accentValue = numericDouble(entry["accent"]) else {
+                    return nil
+                }
+                return WorkspaceActionKey(
+                    key: key,
+                    action: action,
+                    label: label,
+                    symbol: symbol,
+                    accent: UInt32(max(0, min(accentValue, Double(UInt32.max))))
+                )
+            }
+        }
 
         workspaceStates[surface] = state
         if desiredControlTarget == surface { slots = state.slots }
+        if surface == "t3code" {
+            if let value = numericDouble(object["lightingBrightness"]) {
+                lightingBrightness = min(max(value, 0), 1)
+            }
+            if let value = numericDouble(object["autoDimSeconds"]) {
+                autoDimSeconds = max(0, value)
+            }
+            if previousSlots != state.slots || autoDimTimer == nil {
+                noteLightingActivity()
+            }
+        }
     }
 
     private func applyLayout(_ object: [String: Any]) {
@@ -1309,7 +1289,8 @@ extension CodexMicroPeripheral: CBPeripheralManagerDelegate {
                 inputSubscribers.removeAll()
                 hostConnected = false
                 pendingReports.removeAll()
-                rpcBuffer.removeAll()
+                rpcBuffers.removeAll()
+                configBuffers.removeAll()
                 servicesToPublish.removeAll()
                 servicePublishIndex = 0
                 switch peripheral.state {
@@ -1331,7 +1312,7 @@ extension CodexMicroPeripheral: CBPeripheralManagerDelegate {
 
             peripheral.stopAdvertising()
             peripheral.removeAllServices()
-            buildServices()
+            buildBridgeServices()
         }
     }
 
@@ -1346,15 +1327,6 @@ extension CodexMicroPeripheral: CBPeripheralManagerDelegate {
             if let error {
                 let nsError = error as NSError
                 log("add service \(service.uuid) error: \(nsError.domain) \(nsError.code) — \(nsError.localizedDescription)")
-                if service.uuid == CBUUID(string: "1812"), !bridgeMode {
-                    // iOS refuses app-published HID services. Fall back to the
-                    // custom GATT bridge that tools/CodexMicroBridge re-exposes
-                    // on the Mac as a virtual Codex Micro HID device.
-                    log("HID service unavailable — switching to Mac-helper bridge mode")
-                    pm.removeAllServices()
-                    buildBridgeServices()
-                    return
-                }
                 publishedServicesReady = false
                 isAdvertising = false
                 blockingIssue = publicationFailureMessage(service: service, error: nsError)
@@ -1384,8 +1356,8 @@ extension CodexMicroPeripheral: CBPeripheralManagerDelegate {
             } else {
                 isAdvertising = peripheral.isAdvertising
                 blockingIssue = nil
-                setMacConnection(.waitingForMac, detail: "Waiting for the Mac helper")
-                log("advertising as 'Codex Micro'\(bridgeMode ? " (bridge mode, Mac helper required)" : "")")
+                setMacConnection(.waitingForMac, detail: "Waiting for Mac")
+                log("advertising as 'Codex Micro' for Mac clients")
             }
         }
     }
@@ -1400,13 +1372,10 @@ extension CodexMicroPeripheral: CBPeripheralManagerDelegate {
                 }
                 inputSubscribers[central.identifier] = central
                 hostConnected = true
-                setMacConnection(.transportConnected, detail: "Mac helper linked over Bluetooth")
-                blockingIssue = nil
-                if bridgeMode, peripheral.isAdvertising {
-                    peripheral.stopAdvertising()
-                    isAdvertising = false
-                    log("stopped advertising while the Mac helper is connected")
+                if !macConnectionState.isOperational {
+                    setMacConnection(.transportConnected, detail: "Mac linked; checking the selected app")
                 }
+                blockingIssue = nil
                 peripheral.setDesiredConnectionLatency(.low, for: central)
                 log("HID host \(central.identifier) subscribed (max update \(central.maximumUpdateValueLength))")
                 flushPendingReports()
@@ -1417,16 +1386,10 @@ extension CodexMicroPeripheral: CBPeripheralManagerDelegate {
                 sendBridgeControl([
                     "cmd": "setControlTarget",
                     "target": desiredControlTarget,
+                    "surface": desiredControlTarget,
                 ])
+                sendDeviceStatus()
                 requestLatestHostState()
-            } else if characteristic === batteryChar || characteristic.uuid == CBUUID(string: "2A19") {
-                refreshBattery()
-                _ = peripheral.updateValue(
-                    Data([UInt8(batteryPercent)]),
-                    for: batteryChar,
-                    onSubscribedCentrals: [central]
-                )
-                log("host subscribed to battery level")
             }
         }
     }
@@ -1435,10 +1398,13 @@ extension CodexMicroPeripheral: CBPeripheralManagerDelegate {
         Task { @MainActor in
             if isInputReportCharacteristic(characteristic) {
                 inputSubscribers.removeValue(forKey: central.identifier)
+                rpcBuffers.removeValue(forKey: central.identifier)
+                configBuffers.removeValue(forKey: central.identifier)
                 hostConnected = !inputSubscribers.isEmpty
                 if !hostConnected {
                     pendingReports.removeAll()
-                    rpcBuffer.removeAll()
+                    rpcBuffers.removeAll()
+                    configBuffers.removeAll()
                     isSuspended = false
                     setMacConnection(.recovering, detail: "Mac helper disconnected; advertising again")
                     startAdvertising()
@@ -1455,12 +1421,7 @@ extension CodexMicroPeripheral: CBPeripheralManagerDelegate {
     nonisolated func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveRead request: CBATTRequest) {
         Task { @MainActor in
             let value: Data
-            if request.characteristic === batteryChar || request.characteristic.uuid == CBUUID(string: "2A19") {
-                refreshBattery()
-                value = Data([UInt8(batteryPercent)])
-            } else if request.characteristic === protocolModeChar || request.characteristic.uuid == CBUUID(string: "2A4E") {
-                value = Data([protocolMode])
-            } else if isInputReportCharacteristic(request.characteristic) {
+            if isInputReportCharacteristic(request.characteristic) {
                 value = lastInputReport
             } else if isOutputReportCharacteristic(request.characteristic) {
                 value = lastOutputReport
@@ -1498,16 +1459,6 @@ extension CodexMicroPeripheral: CBPeripheralManagerDelegate {
                         peripheral.respond(to: first, withResult: .invalidAttributeValueLength)
                         return
                     }
-                } else if request.characteristic === protocolModeChar || request.characteristic.uuid == CBUUID(string: "2A4E") {
-                    guard value.count == 1, value[0] <= 1 else {
-                        peripheral.respond(to: first, withResult: .invalidAttributeValueLength)
-                        return
-                    }
-                } else if request.characteristic === controlPointChar || request.characteristic.uuid == CBUUID(string: "2A4C") {
-                    guard value.count == 1, value[0] <= 1 else {
-                        peripheral.respond(to: first, withResult: .invalidAttributeValueLength)
-                        return
-                    }
                 } else {
                     peripheral.respond(to: first, withResult: .writeNotPermitted)
                     return
@@ -1521,14 +1472,7 @@ extension CodexMicroPeripheral: CBPeripheralManagerDelegate {
                     var stored = Data(count: 63)
                     stored.replaceSubrange(0..<min(63, body.count), with: body.prefix(63))
                     lastOutputReport = stored
-                    handleOutputReport(value)
-                } else if request.characteristic === protocolModeChar || request.characteristic.uuid == CBUUID(string: "2A4E") {
-                    protocolMode = value[0]
-                    log("host selected HID protocol mode \(protocolMode)")
-                } else if request.characteristic === controlPointChar || request.characteristic.uuid == CBUUID(string: "2A4C") {
-                    isSuspended = value[0] == 0
-                    if isSuspended { pendingReports.removeAll() }
-                    log(isSuspended ? "HID host entered suspend" : "HID host exited suspend")
+                    handleOutputReport(value, centralID: request.central.identifier)
                 }
             }
             peripheral.respond(to: first, withResult: .success)
@@ -1536,14 +1480,6 @@ extension CodexMicroPeripheral: CBPeripheralManagerDelegate {
     }
 
     private func publicationFailureMessage(service: CBService, error: NSError) -> String {
-        let uuidNotAllowed = error.domain == CBErrorDomain
-            && error.code == CBError.Code.uuidNotAllowed.rawValue
-        if service.uuid == CBUUID(string: "1812"), uuidNotAllowed {
-            return "iOS rejected the required Bluetooth HID service (0x1812). Public CoreBluetooth cannot expose this app as a macOS HID device."
-        }
-        if service.uuid == CBUUID(string: "1812") {
-            return "The required Bluetooth HID service could not be published: \(error.localizedDescription)"
-        }
         return "Required Bluetooth service \(service.uuid) could not be published: \(error.localizedDescription)"
     }
 }

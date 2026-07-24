@@ -191,7 +191,8 @@ public struct T3PinLayout: Codable, Equatable, Sendable {
             }
         }
 
-        self.slots = normalized
+        let compact = normalized.compactMap { $0 }
+        self.slots = compact + Array(repeating: nil, count: Self.slotCount - compact.count)
         self.selectedTargetID = selectedTargetID.flatMap { T3TargetID(rawValue: $0) == nil ? nil : $0 }
     }
 
@@ -215,6 +216,8 @@ public struct T3PinLayout: Codable, Equatable, Sendable {
 
         if let existing = slots.firstIndex(where: { $0 == targetID }) {
             slots[existing] = nil
+            let compact = slots.compactMap { $0 }
+            slots = compact + Array(repeating: nil, count: Self.slotCount - compact.count)
             return existing
         }
 

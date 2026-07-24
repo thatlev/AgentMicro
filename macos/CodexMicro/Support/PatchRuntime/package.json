@@ -1,0 +1,10 @@
+{
+  "name": "codex-micro-patch-runtime",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Locked build-time dependencies bundled with the Codex Micro macOS app.",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@electron/asar": "4.2.1"
+  }
+}

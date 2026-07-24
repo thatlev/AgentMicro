@@ -203,7 +203,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.sidepulse.codexmicrovhidmac;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.thislev.codexmicrovhidmac;
 				SDKROOT = macosx;
 			};
 			name = Debug;
@@ -221,7 +221,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.sidepulse.codexmicrovhidmac;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.thislev.codexmicrovhidmac;
 				SDKROOT = macosx;
 			};
 			name = Release;
