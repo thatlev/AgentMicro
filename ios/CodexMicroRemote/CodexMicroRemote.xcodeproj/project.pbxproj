@@ -1,0 +1,341 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		064582322053477138E8212C /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D34DF87589C9EAE1B16A51EC /* ContentView.swift */; };
+		323A220BFE4700A8968913A9 /* T3Backend.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA3B24E23EFD4B1DC1FC6F14 /* T3Backend.swift */; };
+		45AB2B1783341D7070E2396B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E68249C18F1791F40A65FFFC /* Assets.xcassets */; };
+		69B9AAE68EB45468F1AF60A3 /* CodexMicroPeripheral.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BEE93E15D65F181D311279D /* CodexMicroPeripheral.swift */; };
+		77B1C474D89C6FC2F2700CD8 /* VoicePromptRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F48051DE4EB3EDBA72D4D3C /* VoicePromptRecorder.swift */; };
+		8E73DEBB4833C48AC6A2FAF3 /* ClaudeMobileIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0A91157E838D9665F8061D1 /* ClaudeMobileIntegration.swift */; };
+		A5CE4BE28F6D026442CEDB11 /* T3Direct.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59C46A2FB839EAA6C2BB1246 /* T3Direct.swift */; };
+		EEEF572879DC096444762F61 /* CodexMicroRemoteApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDD1416235D6A9DD05A588BC /* CodexMicroRemoteApp.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		1BEE93E15D65F181D311279D /* CodexMicroPeripheral.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexMicroPeripheral.swift; sourceTree = "<group>"; };
+		59C46A2FB839EAA6C2BB1246 /* T3Direct.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = T3Direct.swift; sourceTree = "<group>"; };
+		6F48051DE4EB3EDBA72D4D3C /* VoicePromptRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoicePromptRecorder.swift; sourceTree = "<group>"; };
+		7D3F3F553643F95B3312DD8D /* CodexMicroRemote.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CodexMicroRemote.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		CDD1416235D6A9DD05A588BC /* CodexMicroRemoteApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexMicroRemoteApp.swift; sourceTree = "<group>"; };
+		D34DF87589C9EAE1B16A51EC /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		E0A91157E838D9665F8061D1 /* ClaudeMobileIntegration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeMobileIntegration.swift; sourceTree = "<group>"; };
+		E68249C18F1791F40A65FFFC /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		FA3B24E23EFD4B1DC1FC6F14 /* T3Backend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = T3Backend.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		3894011B4A29F0D175E1CDD7 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				E0A91157E838D9665F8061D1 /* ClaudeMobileIntegration.swift */,
+				1BEE93E15D65F181D311279D /* CodexMicroPeripheral.swift */,
+				CDD1416235D6A9DD05A588BC /* CodexMicroRemoteApp.swift */,
+				D34DF87589C9EAE1B16A51EC /* ContentView.swift */,
+				FA3B24E23EFD4B1DC1FC6F14 /* T3Backend.swift */,
+				59C46A2FB839EAA6C2BB1246 /* T3Direct.swift */,
+				6F48051DE4EB3EDBA72D4D3C /* VoicePromptRecorder.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		4E55D3DBCA4E421CB019BC4D = {
+			isa = PBXGroup;
+			children = (
+				3894011B4A29F0D175E1CDD7 /* Sources */,
+				59C3DA2B0FC8A195378C123E /* Support */,
+				7E85AE7CDFD37AAA8CDCDE5E /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		59C3DA2B0FC8A195378C123E /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				E68249C18F1791F40A65FFFC /* Assets.xcassets */,
+			);
+			path = Support;
+			sourceTree = "<group>";
+		};
+		7E85AE7CDFD37AAA8CDCDE5E /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				7D3F3F553643F95B3312DD8D /* CodexMicroRemote.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		74609BECFA4599B0315C69E0 /* CodexMicroRemote */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4DFBDE58B883E24D7104F441 /* Build configuration list for PBXNativeTarget "CodexMicroRemote" */;
+			buildPhases = (
+				FBF4CE6A78B8A5D0FC6EB65B /* Sources */,
+				EEF99BE224E3C46BAAB69E67 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CodexMicroRemote;
+			packageProductDependencies = (
+			);
+			productName = CodexMicroRemote;
+			productReference = 7D3F3F553643F95B3312DD8D /* CodexMicroRemote.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		31F1826AB4F9817EABAA3843 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					74609BECFA4599B0315C69E0 = {
+						DevelopmentTeam = Q6TQ7WFCK5;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 5D02FA0321FDB10BFCF187B5 /* Build configuration list for PBXProject "CodexMicroRemote" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 4E55D3DBCA4E421CB019BC4D;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 7E85AE7CDFD37AAA8CDCDE5E /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				74609BECFA4599B0315C69E0 /* CodexMicroRemote */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		EEF99BE224E3C46BAAB69E67 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				45AB2B1783341D7070E2396B /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		FBF4CE6A78B8A5D0FC6EB65B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8E73DEBB4833C48AC6A2FAF3 /* ClaudeMobileIntegration.swift in Sources */,
+				69B9AAE68EB45468F1AF60A3 /* CodexMicroPeripheral.swift in Sources */,
+				EEEF572879DC096444762F61 /* CodexMicroRemoteApp.swift in Sources */,
+				064582322053477138E8212C /* ContentView.swift in Sources */,
+				323A220BFE4700A8968913A9 /* T3Backend.swift in Sources */,
+				A5CE4BE28F6D026442CEDB11 /* T3Direct.swift in Sources */,
+				77B1C474D89C6FC2F2700CD8 /* VoicePromptRecorder.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		038AA95EACFAAB7741B7868E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
+				DEVELOPMENT_TEAM = Q6TQ7WFCK5;
+				INFOPLIST_FILE = Support/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.7;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sidepulse.codexmicroremote;
+				SDKROOT = iphoneos;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		62C91B41348E7BCFF621CD71 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		C089E515C73EE27427BC261D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		F616B3C09711250FEF5F57E5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 13;
+				DEVELOPMENT_TEAM = Q6TQ7WFCK5;
+				INFOPLIST_FILE = Support/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.7;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sidepulse.codexmicroremote;
+				SDKROOT = iphoneos;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		4DFBDE58B883E24D7104F441 /* Build configuration list for PBXNativeTarget "CodexMicroRemote" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F616B3C09711250FEF5F57E5 /* Debug */,
+				038AA95EACFAAB7741B7868E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		5D02FA0321FDB10BFCF187B5 /* Build configuration list for PBXProject "CodexMicroRemote" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C089E515C73EE27427BC261D /* Debug */,
+				62C91B41348E7BCFF621CD71 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 31F1826AB4F9817EABAA3843 /* Project object */;
+}

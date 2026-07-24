@@ -1,0 +1,29 @@
+# macOS and editor state
+.DS_Store
+.vscode/
+*.xcuserstate
+xcuserdata/
+
+# Xcode and Swift build products
+DerivedData/
+build/
+.build/
+*.dSYM/
+*.dSYM.zip
+*.app
+*.ipa
+*.dmg
+
+# JavaScript dependencies and packaged extension artifacts
+node_modules/
+*.vsix
+
+# Local logs and generated binaries
+*.log
+tools/CodexMicroBridge/codexbridge
+tools/CodexMicroEmu/codexmicroemu
+tools/CodexMicroVHid/vhid
+tools/CodexMicroVHid/vhid2
+
+# Distribution output
+dist/

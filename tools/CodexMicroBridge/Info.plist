@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>codexbridge</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.sidepulse.codexbridge</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>CodexBridge</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>13</string>
+	<key>LSBackgroundOnly</key>
+	<true/>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Codex Bridge uses Bluetooth to connect the Codex Micro controller to this Mac.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Codex Bridge uses Bluetooth to connect the Codex Micro controller to this Mac.</string>
+</dict>
+</plist>
