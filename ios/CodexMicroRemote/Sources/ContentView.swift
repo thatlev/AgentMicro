@@ -83,9 +83,10 @@ enum ControlPage: Int, CaseIterable, Identifiable {
 
     var id: Int { rawValue }
 
-    /// The shipped phone app is one focused T3 Code remote. Legacy surfaces
-    /// remain in the source for protocol reference but are not user-facing.
-    static let displayed: [ControlPage] = [.t3Code]
+    /// The shipped phone app exposes the two supported production surfaces.
+    /// Codex is routed through the Codex Micro menu-bar companion; T3 Code is
+    /// routed directly to the custom T3 desktop build.
+    static let displayed: [ControlPage] = [.codex, .t3Code]
     var isDisplayed: Bool { ControlPage.displayed.contains(self) }
 
     var title: String {
@@ -290,7 +291,7 @@ private struct ScrollTouchDelayDisabler: UIViewRepresentable {
 struct ContentView: View {
     @EnvironmentObject private var peripheral: CodexMicroPeripheral
     @AppStorage("codexMicro.controlSurfaceMode") private var surfaceModeRaw = ControlSurfaceMode.framed.rawValue
-    @AppStorage("codexMicro.controlPage") private var pageRaw = ControlPage.t3Code.rawValue
+    @AppStorage("codexMicro.controlPage") private var pageRaw = ControlPage.codex.rawValue
     @AppStorage("codexMicro.vscodeLauncher") private var vscodeLauncherRaw = WorkspaceLauncher.claudeExtension.rawValue
     @AppStorage("codexMicro.vscodeCustomCommand") private var vscodeCustomLauncherValue = ""
     @AppStorage("codexMicro.t3CodeLauncher") private var t3CodeLauncherRaw = WorkspaceLauncher.t3NewSession.rawValue
@@ -315,6 +316,7 @@ struct ContentView: View {
 
                 VStack(spacing: contentSpacing(for: geometry.size)) {
                     statusBar
+                        .padding(.horizontal, 6)
 
                     GeometryReader { boardSpace in
                         // PageTabViewStyle supplies the system UIPageControl.
@@ -389,8 +391,8 @@ struct ContentView: View {
     }
 
     private var selectedPage: ControlPage {
-        let page = ControlPage(rawValue: pageRaw) ?? .t3Code
-        return page.isDisplayed ? page : .t3Code
+        let page = ControlPage(rawValue: pageRaw) ?? .codex
+        return page.isDisplayed ? page : .codex
     }
 
     private var pageBinding: Binding<ControlPage> {
@@ -518,7 +520,7 @@ struct ContentView: View {
             return "Connected to your Mac"
         }
         if peripheral.bridgeMode, peripheral.isAdvertising {
-            return "Waiting for T3 Code"
+            return "Waiting for a Mac connection"
         }
         return "iPhone control surface"
     }
@@ -563,7 +565,7 @@ struct ContentView: View {
             return ("Starting", "ellipsis.circle.fill", .secondary)
         }
         if peripheral.isAdvertising {
-            return ("Waiting for T3 Code", "dot.radiowaves.left.and.right", .blue)
+            return ("Waiting for Mac", "dot.radiowaves.left.and.right", .blue)
         }
         return ("Ready", "checkmark.circle.fill", Color(packedRGB: 0x168A55))
     }
@@ -626,8 +628,6 @@ private struct HardwareConsole: View {
     }
 
     private var effectiveWorkspacePins: [String?] { workspaceState.pins }
-
-    private var effectiveWorkspaceTargets: [VSCodeTarget] { workspaceState.targets }
 
     private var effectiveSelectedTargetID: String? { workspaceState.selectedTargetID }
     /// Active voice colour. Rather than drawing a new outline over the board,
@@ -701,6 +701,10 @@ private struct HardwareConsole: View {
                             onPress: { pressing in
                                 if pressing { pulseDialPerimeter() }
                                 routeKey("ENC", action: pressing ? 1 : 0)
+                            },
+                            onLongPress: {
+                                guard page == .t3Code else { return }
+                                routeKey("ENC_HOLD", action: 1)
                             }
                         )
                         .frame(width: keySide, height: keySide)
@@ -744,14 +748,9 @@ private struct HardwareConsole: View {
                                 sendKey("ACT09", pressing: $0)
                             }
                         } else {
-                            workspaceNewKey(side: keySide)
-                            workspaceActionKey("APPR", symbol: "checkmark", accent: Color(packedRGB: 0x168A55), side: keySide) {
-                                sendKey("ACT07", pressing: $0)
+                            ForEach(0..<4, id: \.self) { index in
+                                t3ConfiguredActionKey(index: index, side: keySide)
                             }
-                            workspaceActionKey("REJ", symbol: "xmark", accent: Color(packedRGB: 0xCC334F), side: keySide) {
-                                sendKey("ACT08", pressing: $0)
-                            }
-                            workspacePinKey(side: keySide)
                         }
                     }
 
@@ -772,11 +771,12 @@ private struct HardwareConsole: View {
                                 // the bridge activates the app and invokes its
                                 // native Command-D dictation toggle. The VS Code
                                 // surface retains its provider-advertised route.
-                                usesNativeVoice: page == .claudeCode
+                                usesNativeVoice: page == .t3Code
+                                    || page == .claudeCode
                                     || (page == .vscode
                                         && selectedWorkspaceTarget?.nativeVoice == true
                                         && !autoSendVoicePrompts),
-                                confirmedNativeVoiceActive: page == .claudeCode
+                                confirmedNativeVoiceActive: page == .claudeCode || page == .t3Code
                                     ? workspaceState.nativeVoiceActive
                                     : nil,
                                 onNativeVoice: { active, targetID in
@@ -802,14 +802,7 @@ private struct HardwareConsole: View {
                         } else if page == .claudeCode {
                             workspaceSendKey(side: keySide)
                         } else {
-                            workspaceActionKey(
-                                "SEND",
-                                symbol: "arrow.up",
-                                accent: Color(packedRGB: 0x168A55),
-                                side: keySide
-                            ) {
-                                sendKey("ACT12", pressing: $0)
-                            }
+                            workspaceSendKey(side: keySide)
                         }
                     }
                 }
@@ -1074,29 +1067,12 @@ private struct HardwareConsole: View {
             }
             routeKey("AG0\(index)", action: pressing ? 1 : 0, agent: index)
         }
-        .overlay(alignment: .topTrailing) {
-            if page.usesWorkspaceBridge,
-               effectiveWorkspacePins.indices.contains(index),
-               effectiveWorkspacePins[index] != nil {
-                Image(systemName: "pin.fill")
-                    .font(.system(size: max(8, side * 0.14), weight: .bold))
-                    .foregroundStyle(.primary.opacity(0.72))
-                    .padding(max(5, side * 0.09))
-                    .accessibilityHidden(true)
-            }
-        }
         .accessibilityLabel(agentAccessibilityLabel(index))
         .frame(width: side, height: side)
     }
 
     private func agentAccessibilityLabel(_ index: Int) -> String {
-        guard page.usesWorkspaceBridge,
-              effectiveWorkspacePins.indices.contains(index),
-              let id = effectiveWorkspacePins[index],
-              let target = effectiveWorkspaceTargets.first(where: { $0.id == id }) else {
-            return "Agent \(index + 1)"
-        }
-        return "Agent \(index + 1), pinned to \(target.label)"
+        "Agent \(index + 1)"
     }
 
     private func light(at index: Int) -> SlotLight {
@@ -1275,6 +1251,27 @@ private struct HardwareConsole: View {
         .frame(width: side, height: side)
     }
 
+    @ViewBuilder
+    private func t3ConfiguredActionKey(index: Int, side: CGFloat) -> some View {
+        let defaults = [
+            WorkspaceActionKey(key: "ACT06", action: "fast", label: "FAST", symbol: "bolt.fill", accent: 0x168AFF),
+            WorkspaceActionKey(key: "ACT07", action: "new", label: "NEW", symbol: "square.and.pencil", accent: 0x168A55),
+            WorkspaceActionKey(key: "ACT08", action: "pin", label: "PIN", symbol: "pin.fill", accent: 0x8B5CF6),
+            WorkspaceActionKey(key: "ACT09", action: "fork", label: "FORK", symbol: "arrow.triangle.branch", accent: 0x5856D6)
+        ]
+        let configured = workspaceState.actionKeys.indices.contains(index)
+            ? workspaceState.actionKeys[index]
+            : defaults[index]
+        workspaceActionKey(
+            configured.label,
+            symbol: configured.symbol,
+            accent: Color(packedRGB: configured.accent),
+            side: side
+        ) { pressing in
+            sendKey(configured.key, pressing: pressing)
+        }
+    }
+
     private func workspaceBlankKey(side: CGFloat) -> some View {
         HardwareKeyCap(pressed: false, glowColor: nil) {
             Circle()
@@ -1296,8 +1293,8 @@ private struct HardwareConsole: View {
             title: descriptor.label,
             symbol: descriptor.symbol,
             accent: descriptor.accent,
-            accessibilityName: "Send to Claude",
-            hint: "Sends the current Claude Desktop composer message"
+            accessibilityName: "Send to \(page.surfaceName)",
+            hint: "Sends the current \(page.surfaceName) composer message"
         ) { pressing in
             sendKey("ACT12", pressing: pressing)
         }
@@ -1305,8 +1302,12 @@ private struct HardwareConsole: View {
     }
 
     private func workspaceNewKey(side: CGFloat) -> some View {
-        workspaceActionKey("NEW", symbol: "plus", accent: Color(packedRGB: page.accentRGB), side: side) { pressing in
+        workspaceActionKey("NEW", symbol: "square.and.pencil", accent: Color(packedRGB: 0x168A55), side: side) { pressing in
             guard pressing else { return }
+            if page == .t3Code {
+                sendKey("ACT07", pressing: true)
+                return
+            }
             let value = workspaceLauncher.requiresCustomValue
                 ? customLauncherValue.trimmingCharacters(in: .whitespacesAndNewlines)
                 : workspaceLauncher.value
@@ -2151,9 +2152,8 @@ private struct VSCodeVoiceKey: View {
     let targetID: String?
     let autoSend: Bool
     let opensExternalPrefill: Bool
-    /// Native provider dictation is used only when the selected concrete
-    /// target advertises it and auto-send is off. Auto-send needs a transcript
-    /// completion event, which Claude's VS Code command does not expose.
+    /// Native dictation is used for T3's macOS composer and for concrete
+    /// provider targets that advertise their own voice action.
     let usesNativeVoice: Bool
     /// Claude Desktop confirms start/stop through bridge state. Nil retains the
     /// existing local latch for providers that do not publish acknowledgements.
@@ -2242,9 +2242,9 @@ private struct VSCodeVoiceKey: View {
         }
     }
 
-    /// Mirrors the physical Codex microphone contract without sharing its
-    /// backend: hold is push-to-talk, a quick double-tap leaves Claude's native
-    /// dictation latched, and one tap while latched stops it.
+    /// Mirrors the physical Codex microphone contract: hold is push-to-talk, a
+    /// quick double-tap leaves native dictation latched, and one tap while
+    /// latched stops it.
     private func handleNativeVoiceEdge(_ pressing: Bool) {
         if pressing {
             nativePressStart = Date()
@@ -2317,7 +2317,9 @@ private struct VSCodeVoiceKey: View {
     }
 
     private func title(pressed: Bool) -> String {
-        if usesNativeVoice { return pressed ? "LISTENING" : "CLAUDE VOICE" }
+        if usesNativeVoice {
+            return pressed ? "LISTENING" : (surfaceName == "T3 Code" ? "MAC DICTATION" : "CLAUDE VOICE")
+        }
         switch recorder.phase {
         case .idle: return opensExternalPrefill ? "HOLD TO PREFILL" : "HOLD TO TALK"
         case .requestingPermission: return "ALLOW MICROPHONE"
@@ -2811,6 +2813,7 @@ private struct RotaryControl: View {
 
     let onStep: (Bool) -> Void
     let onPress: (Bool) -> Void
+    let onLongPress: () -> Void
 
     @State private var rotation = 42.0
     // Circular (rim) tracking.
@@ -3092,6 +3095,7 @@ private struct RotaryControl: View {
             try? await Task.sleep(nanoseconds: 500_000_000)
             guard !Task.isCancelled, isPressed, !isRotating else { return }
             settingsTick &+= 1
+            onLongPress()
         }
         pendingPressTask = task
     }
@@ -3390,13 +3394,9 @@ private struct DeviceDetailsSheet: View {
     @EnvironmentObject private var peripheral: CodexMicroPeripheral
     @Environment(\.dismiss) private var dismiss
     @AppStorage("codexMicro.codexMicSource") private var codexMicSourceRaw = CodexMicSource.computer.rawValue
-    @State private var t3PairingInput = ""
-    @State private var t3PairingStatus: String?
     @AppStorage("codexMicro.controlSurfaceMode") private var surfaceModeRaw = ControlSurfaceMode.framed.rawValue
     @AppStorage("codexMicro.vscodeLauncher") private var vscodeLauncherRaw = WorkspaceLauncher.claudeExtension.rawValue
     @AppStorage("codexMicro.vscodeCustomCommand") private var vscodeCustomLauncherValue = ""
-    @AppStorage("codexMicro.t3CodeLauncher") private var t3CodeLauncherRaw = WorkspaceLauncher.t3NewSession.rawValue
-    @AppStorage("codexMicro.t3CodeCustomCommand") private var t3CodeCustomLauncherValue = ""
     @AppStorage("codexMicro.claudeCodeLauncher") private var claudeCodeLauncherRaw = WorkspaceLauncher.claudeNewSession.rawValue
     @AppStorage("codexMicro.claudeCodeCustomLink") private var claudeCodeCustomLauncherValue = ""
     @AppStorage("codexMicro.voiceAutoSend") private var voiceAutoSend = false
@@ -3419,30 +3419,12 @@ private struct DeviceDetailsSheet: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                // VS Code and T3 Code setup remain persisted but are hidden with
-                // their parked pages.
-
-                launcherSection(
-                    page: .claudeCode,
-                    launcherRaw: $claudeCodeLauncherRaw,
-                    customValue: $claudeCodeCustomLauncherValue
-                )
-
-                Section("Claude Desktop session pins") {
-                    let pinCount = peripheral.workspaceState(for: ControlPage.claudeCode.hostTarget)
-                        .pins.compactMap { $0 }.count
-                    LabeledContent("Saved exact sessions", value: "\(pinCount) / 6")
-
-                    Text("Open a Claude Code conversation on the Mac and press PIN. The Mac helper identifies that exact conversation automatically; the six agent keys reopen the sessions assigned to them.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
                 Section("Voice prompts") {
                     Toggle("Auto-send after dictation", isOn: $voiceAutoSend)
 
-                    Text("On the Claude page, the voice key controls Claude Desktop's own dictation using the Mac's current microphone. Hold to talk, tap to stop, or double-tap to latch it.")
+                    Text(page == .t3Code
+                        ? "On T3 Code, the microphone key controls macOS Dictation in the Mac composer. Hold to talk, or double-tap to latch."
+                        : "The microphone key records on this iPhone and sends the recognized prompt to Codex. Hold to talk, or double-tap to latch.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -3468,10 +3450,6 @@ private struct DeviceDetailsSheet: View {
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
-                }
-
-                if page == .t3Code {
-                    t3ConnectionSection
                 }
 
                 if let issue = peripheral.blockingIssue, !issue.isEmpty {
@@ -3646,67 +3624,6 @@ private struct DeviceDetailsSheet: View {
 
     private var selectedCodexMicSource: CodexMicSource {
         CodexMicSource(rawValue: codexMicSourceRaw) ?? .computer
-    }
-
-    // MARK: T3 Code connection
-
-    @ViewBuilder
-    private var t3ConnectionSection: some View {
-        let state = peripheral.workspaceState(for: ControlPage.t3Code.hostTarget)
-        Section("T3 Code connection") {
-            LabeledContent("Status", value: t3StatusText(state))
-
-            TextField("http://192.168.x.x:3773/pair#token=…", text: $t3PairingInput)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled(true)
-                .keyboardType(.URL)
-                .font(.footnote.monospaced())
-                .lineLimit(1)
-
-            Button {
-                pairT3()
-            } label: {
-                Label(peripheral.t3IsPaired ? "Re-pair" : "Pair", systemImage: "link")
-            }
-            .disabled(t3PairingInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-            if peripheral.t3IsPaired {
-                Button(role: .destructive) {
-                    peripheral.unpairT3()
-                    t3PairingStatus = "Forgotten. Paste a pairing URL to reconnect."
-                } label: {
-                    Label("Forget server", systemImage: "trash")
-                }
-            }
-
-            if let status = t3PairingStatus {
-                Text(status)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Text("On the Mac, start the T3 server so it prints a LAN pairing URL:\n  node apps/server/src/bin.ts serve --host 0.0.0.0 --port 3773\nPaste its “Pairing URL” above. This iPhone then talks straight to T3 over your local network — no Mac bridge involved.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private func t3StatusText(_ state: WorkspaceBridgeState) -> String {
-        if state.connected { return "Connected" }
-        if let issue = state.issue, !issue.isEmpty { return issue }
-        return peripheral.t3IsPaired ? "Connecting…" : "Not paired"
-    }
-
-    private func pairT3() {
-        let url = t3PairingInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !url.isEmpty else { return }
-        t3PairingStatus = "Pairing… watch Status above."
-        // Fire-and-forget: the live poll flips Status to Connected (or surfaces a
-        // pairing issue) via the reactive workspace state.
-        peripheral.pairT3(url)
-        t3PairingInput = ""
     }
 
     @ViewBuilder

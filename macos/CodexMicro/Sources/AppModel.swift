@@ -47,7 +47,7 @@ final class AppModel: ObservableObject {
     private var hasStarted = false
     private var subscriptions = Set<AnyCancellable>()
     private var workspaceObservationTokens: [NSObjectProtocol] = []
-    private let healthyRoundTripMaximumAge: TimeInterval = 90
+    private let healthyRoundTripMaximumAge: TimeInterval = 45
     private let patchFallbackRefreshInterval: Duration = .seconds(300)
 
     private enum DefaultsKey {
@@ -179,6 +179,7 @@ final class AppModel: ObservableObject {
 
     func refreshStatus() {
         guard !isBusy else { return }
+        bridgeEngine.ensureConnection()
         Task { [weak self] in
             await self?.refreshPatchStatus()
         }

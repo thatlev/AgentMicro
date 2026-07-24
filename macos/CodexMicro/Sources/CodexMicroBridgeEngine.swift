@@ -105,6 +105,15 @@ final class CodexMicroBridgeEngine {
         log("Codex Micro connection restart requested")
     }
 
+    func ensureConnection() {
+        guard hasStarted else {
+            start()
+            return
+        }
+        guard !isPaused else { return }
+        bridge.ensureConnected()
+    }
+
     func shutdown() {
         guard hasStarted else { return }
         bridge.stop()
@@ -165,7 +174,7 @@ final class CodexMicroBridgeEngine {
         }
 
         t3Controller.onPublish = {
-            [weak self] targets, pins, selected, connected, slots, issue in
+            [weak self] targets, pins, selected, connected, slots, issue, nativeVoiceActive in
             guard let self else { return }
             DispatchQueue.main.async {
                 self.bridge.sendWorkspaceState(
@@ -175,7 +184,8 @@ final class CodexMicroBridgeEngine {
                     selected: selected,
                     connected: connected,
                     slots: slots,
-                    issue: issue
+                    issue: issue,
+                    nativeVoiceActive: nativeVoiceActive
                 )
             }
         }
