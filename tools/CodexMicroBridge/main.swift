@@ -173,6 +173,7 @@ let hidReportID: UInt8 = 6
 let tagPresence: UInt8 = 0x50 // 'P'
 let tagInput: UInt8 = 0x49    // 'I'
 let tagOutput: UInt8 = 0x4F   // 'O'
+let tagT3Client: UInt8 = 0x54 // 'T'
 
 func defaultCodexBridgeSocketPath() -> String {
     let directory = (NSTemporaryDirectory() as NSString)
@@ -241,9 +242,15 @@ func log(_ message: String) {
 // MARK: - Unix socket server speaking to the in-app shim
 
 final class SocketServer {
+    private enum ClientRole {
+        case shim
+        case t3Code
+    }
+
     let path: String
     private var serverFD: Int32 = -1
     private var clients: Set<Int32> = []
+    private var clientRoles: [Int32: ClientRole] = [:]
     private let lock = NSLock()
     private var present = false
 
@@ -305,6 +312,7 @@ final class SocketServer {
         lock.lock()
         let connectedClients = Array(clients)
         clients.removeAll()
+        clientRoles.removeAll()
         let descriptor = serverFD
         serverFD = -1
         present = false
@@ -328,6 +336,7 @@ final class SocketServer {
     private func addClient(_ fd: Int32) {
         lock.lock()
         clients.insert(fd)
+        clientRoles[fd] = .shim
         let wasPresent = present
         lock.unlock()
         let count = clientCount()
@@ -340,6 +349,7 @@ final class SocketServer {
     private func removeClient(_ fd: Int32) {
         lock.lock()
         clients.remove(fd)
+        clientRoles.removeValue(forKey: fd)
         lock.unlock()
         close(fd)
         let count = clientCount()
@@ -350,7 +360,33 @@ final class SocketServer {
     func clientCount() -> Int {
         lock.lock()
         defer { lock.unlock() }
-        return clients.count
+        return clients.reduce(into: 0) { count, fd in
+            if clientRoles[fd] != .t3Code { count += 1 }
+        }
+    }
+
+    func t3ClientCount() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return clients.reduce(into: 0) { count, fd in
+            if clientRoles[fd] == .t3Code { count += 1 }
+        }
+    }
+
+    private func identifyT3Client(_ fd: Int32, payload: Data) {
+        guard String(data: payload, encoding: .utf8) == "t3code" else { return }
+        lock.lock()
+        guard clients.contains(fd) else {
+            lock.unlock()
+            return
+        }
+        let changed = clientRoles[fd] != .t3Code
+        clientRoles[fd] = .t3Code
+        lock.unlock()
+        guard changed else { return }
+        log("T3 Code transport attached")
+        let count = clientCount()
+        DispatchQueue.main.async { [weak self] in self?.onClientCountChange(count) }
     }
 
     private func readLoop(_ fd: Int32) {
@@ -369,6 +405,8 @@ final class SocketServer {
                 if frame[0] == tagOutput {
                     let report = frame.subdata(in: 1..<frame.count)
                     DispatchQueue.main.async { [weak self] in self?.onOutput(report) }
+                } else if frame[0] == tagT3Client {
+                    identifyT3Client(fd, payload: frame.subdata(in: 1..<frame.count))
                 }
             }
         }
@@ -414,6 +452,15 @@ final class SocketServer {
     /// Device -> host report. The report must already include report ID 6.
     func broadcastInput(_ report: Data) {
         broadcast(tagInput, payload: report)
+    }
+
+    /// Channel-5 workspace controls belong to the packaged T3 app while it is
+    /// attached. ChatGPT shim clients never receive these private controls.
+    func broadcastT3Input(_ report: Data) {
+        lock.lock()
+        let targets = clients.filter { clientRoles[$0] == .t3Code }
+        lock.unlock()
+        for fd in targets { send(tagInput, payload: report, to: fd) }
     }
 }
 
@@ -998,7 +1045,16 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         notePhoneActivity()
         if value.first == 2 { observeDeviceResponse(value) }
         if value.first == 5 {
-            handleBridgeControl(value)
+            if server.t3ClientCount() > 0 {
+                var report = Data([hidReportID])
+                report.append(value)
+                server.broadcastT3Input(report)
+            } else {
+                // The native menu companion remains a complete fallback when
+                // T3 Code is closed; once T3 attaches, its configurable
+                // controls own this surface and execute each command once.
+                handleBridgeControl(value)
+            }
             return
         }
         // VSCode target: intercept the phone's channel-2 RPC (key/dial/joystick

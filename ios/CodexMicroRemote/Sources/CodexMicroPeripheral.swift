@@ -1013,6 +1013,7 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
     private func applyWorkspaceState(_ object: [String: Any], surface: String) {
         var state = workspaceState(for: surface)
         let previousSlots = state.slots
+        var receivedPins = false
         state.connected = object["connected"] as? Bool ?? false
         state.selectedTargetID = object["selected"] as? String
         state.nativeVoiceActive = object["nativeVoiceActive"] as? Bool ?? false
@@ -1033,6 +1034,7 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
         }
 
         if let values = object["pins"] as? [Any] {
+            receivedPins = true
             var next = Array<String?>(repeating: nil, count: 6)
             for (index, value) in values.prefix(6).enumerated() {
                 if let id = value as? String, !id.isEmpty { next[index] = id }
@@ -1042,6 +1044,14 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
 
         if let values = object["slots"] as? [[String: Any]] {
             state.slots = applyingSlotUpdates(values, to: state.slots)
+        }
+        // Pin membership is authoritative for workspace surfaces. Explicitly
+        // retire every newly empty slot so a compacted pin list can never leave
+        // the vacated final key showing its previous white selection light.
+        if receivedPins {
+            for index in state.pins.indices where state.pins[index] == nil {
+                state.slots[index] = SlotLight()
+            }
         }
         if let controls = object["controls"] as? [String: Any],
            let values = controls["actionKeys"] as? [[String: Any]] {
