@@ -1,4 +1,4 @@
-Codex Micro — third-party notices
+AgentMicro — third-party notices
 =================================
 
 The self-contained ChatGPT patch runtime includes:
@@ -9,5 +9,5 @@ The self-contained ChatGPT patch runtime includes:
 - @electron/asar and its npm dependencies. Their complete license files remain
   inside node_modules beside the distributed package sources.
 
-Runtime versions are recorded in runtime-version.json. Codex Micro does not
+Runtime versions are recorded in runtime-version.json. AgentMicro does not
 replace or remove the license files shipped by these dependencies.

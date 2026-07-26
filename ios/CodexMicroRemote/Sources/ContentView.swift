@@ -2,7 +2,7 @@
 //  ContentView.swift
 //  CodexMicroRemote
 //
-//  A responsive, touch-first Codex Micro remote.
+//  A responsive, touch-first AgentMicro remote.
 //
 
 import SwiftUI
@@ -159,7 +159,7 @@ enum ControlPage: Int, CaseIterable, Identifiable {
     var id: Int { rawValue }
 
     /// The shipped phone app exposes the two supported production surfaces.
-    /// Codex is routed through the Codex Micro menu-bar companion; T3 Code is
+    /// Codex is routed through the AgentMicro menu-bar companion; T3 Code is
     /// routed directly to the custom T3 desktop build.
     static let displayed: [ControlPage] = [.codex, .t3Code]
     var isDisplayed: Bool { ControlPage.displayed.contains(self) }
@@ -1405,7 +1405,7 @@ private struct HardwareConsole: View {
             accessibilityName: value.title,
             hint: value == .clearComposer
                 ? "Clears the current message"
-                : "Opens Codex Micro settings"
+                : "Opens AgentMicro settings"
         )
     }
 
@@ -3213,7 +3213,7 @@ private struct RotaryControl: View {
             pressStartedAt = Date()
             onPress(true)
             pressTick &+= 1
-            // Crossing the 500 ms hold threshold opens Codex Micro settings on
+            // Crossing the 500 ms hold threshold opens AgentMicro settings on
             // the host; a heavier tick confirms the hold has registered.
             try? await Task.sleep(nanoseconds: 500_000_000)
             guard !Task.isCancelled, isPressed, !isRotating else { return }
@@ -3558,8 +3558,8 @@ private struct DeviceDetailsSheet: View {
                     }
                 } else if !pageOperational {
                     Section("Connect") {
-                        setupStep(1, "Keep Codex Micro open on this iPhone.")
-                        setupStep(2, "Open Codex Micro from Applications on the Mac.")
+                        setupStep(1, "Keep AgentMicro open on this iPhone.")
+                        setupStep(2, "Open AgentMicro from Applications on the Mac.")
                         if page == .codex {
                             setupStep(3, "Open ChatGPT. If the Mac companion requests an integration update, restore first and then patch.")
                         } else {
@@ -3649,7 +3649,7 @@ private struct DeviceDetailsSheet: View {
                     }
                 }
             }
-            .navigationTitle("Codex Micro")
+            .navigationTitle("AgentMicro")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {

@@ -130,7 +130,7 @@ final class MacOSDictationController {
             guard AXIsProcessTrustedWithOptions([promptKey: true] as CFDictionary) else {
                 self.onStateChange(
                     false,
-                    "Allow Codex Micro in System Settings › Privacy & Security › Accessibility, then press the mic again."
+                    "Allow AgentMicro in System Settings › Privacy & Security › Accessibility, then press the mic again."
                 )
                 return
             }
@@ -155,7 +155,7 @@ final class MacOSDictationController {
                 log("t3: macOS dictation failed — \(error)")
                 self.onStateChange(
                     self.desiredActive,
-                    "macOS Dictation could not be toggled. Confirm Dictation is enabled and Codex Micro has Accessibility access."
+                    "macOS Dictation could not be toggled. Confirm Dictation is enabled and AgentMicro has Accessibility access."
                 )
             } else {
                 log("t3: macOS dictation \(active ? "started" : "stopped")")
@@ -211,7 +211,7 @@ struct CodexMicroBridgeStatus: Equatable {
     var reportStreamReady = false
     var chatGPTLinked = false
     var endToEnd: EndToEndConnectionState = .recovering
-    var detail = "Starting Codex Micro"
+    var detail = "Starting AgentMicro"
     var lastSuccessfulRoundTrip: Date?
 
     var isOperational: Bool {
@@ -835,13 +835,13 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         switch central.state {
         case .poweredOn:
             bluetoothState = .scanning
-            log("Bluetooth on — scanning for the Codex Micro Remote iPhone app")
+            log("Bluetooth on — scanning for the AgentMicro iPhone app")
             startScanning()
         case .unauthorized:
             bluetoothState = .denied
             server.setPresent(false)
 #if CODEX_MICRO_MENU_APP
-            log("Bluetooth access denied. Allow Codex Micro in System Settings › Privacy & Security › Bluetooth, then choose Reconnect.")
+            log("Bluetooth access denied. Allow AgentMicro in System Settings › Privacy & Security › Bluetooth, then choose Reconnect.")
 #else
             log("Bluetooth access denied. Allow the bridge in System Settings › Privacy & Security › Bluetooth, then rerun.")
 #endif
@@ -986,7 +986,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
             guard let self, !self.isSubscribed else { return }
             self.presenceDropWorkItem = nil
             self.server.setPresent(false)
-            log("iPhone reconnect grace expired — Codex Micro removed")
+            log("iPhone reconnect grace expired — AgentMicro removed")
         }
         presenceDropWorkItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + reconnectGrace, execute: work)
@@ -1021,7 +1021,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
             central.cancelPeripheralConnection(peripheral)
             return
         }
-        log("subscribed to the iPhone report stream — Codex Micro is live")
+        log("subscribed to the iPhone report stream — AgentMicro is live")
         // Once the report stream is live, duplicate scan callbacks add no
         // information and can contain cached advertisements from before iOS
         // stopped advertising. Stop scanning until a real disconnect.
@@ -1929,7 +1929,7 @@ func startStdinLoop(_ emu: EmuDevice) {
 
 // MARK: - VSCode target: drive editor tabs / agent terminals from the macropad
 
-/// Unix-domain socket client to the Codex Micro VSCode companion extension.
+/// Unix-domain socket client to the AgentMicro VS Code companion extension.
 /// Newline-delimited JSON both ways; auto-reconnects if the window/extension
 /// restarts. Thread-safe writes.
 final class VSCodeClient {
@@ -4340,7 +4340,7 @@ func runBridgeRegressionTests() -> Bool {
         return fail("T3 backend self-tests failed: \(error)")
     }
 
-    print("CodexMicroBridge regression tests passed")
+    print("AgentMicro bridge regression tests passed")
     return true
 }
 
@@ -4527,7 +4527,7 @@ if target == .auto, !emulate {
     layoutWatcher.start()
     client.start()
     lights.start()
-    log("CodexMicroBridge auto mode — Codex and Claude Desktop are visible on iPhone")
+    log("AgentMicro bridge auto mode — Codex and Claude Desktop are visible on iPhone")
     log("VS Code socket: \(vscodeSocket)")
     bridge.start()
 } else if target == .vscode {
@@ -4580,7 +4580,7 @@ if target == .auto, !emulate {
         // erase every pin. No current iPhone build sends `setPins`; leaving
         // Bridge.onSetPins nil makes the command a harmless no-op.
         lights.start()
-        log("CodexMicroBridge (VSCode target) — keep the Codex Micro Remote app open on your iPhone")
+        log("AgentMicro bridge (VS Code target) — keep the AgentMicro app open on your iPhone")
         log("Socket to extension: \(vscodeSocket)")
         bridge.start()
     }
@@ -4605,7 +4605,7 @@ if target == .auto, !emulate {
         }
         bridge.onSubscribed = { layoutWatcher.onUpdate(layoutWatcher.current) }
         layoutWatcher.start()
-        log("CodexMicroBridge starting — keep the Codex Micro Remote app open on your iPhone")
+        log("AgentMicro bridge starting — keep the AgentMicro app open on your iPhone")
         bridge.start()
     }
 }

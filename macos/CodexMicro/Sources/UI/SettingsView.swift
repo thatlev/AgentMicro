@@ -157,7 +157,7 @@ private struct GeneralSettingsTab: View {
                 VStack(spacing: 0) {
                     settingsToggle(
                         title: "Launch at Login",
-                        detail: "Start Codex Micro when you sign in to this Mac.",
+                        detail: "Start AgentMicro when you sign in to this Mac.",
                         isOn: Binding(
                             get: { model.launchAtLogin },
                             set: { model.setLaunchAtLogin($0) }
@@ -216,7 +216,7 @@ private struct IntegrationSettingsTab: View {
     var body: some View {
         SettingsPage(
             title: "ChatGPT Integration",
-            subtitle: "Codex Micro changes ChatGPT only when you explicitly confirm it."
+            subtitle: "AgentMicro changes ChatGPT only when you explicitly confirm it."
         ) {
             SettingsCard {
                 VStack(alignment: .leading, spacing: 12) {
@@ -236,7 +236,7 @@ private struct IntegrationSettingsTab: View {
                     if model.integrationNeedsUpdate {
                         Label {
                             Text(
-                                "Update required: restore the version-matched backup first, then patch again. This should happen only after ChatGPT or Codex Micro changes."
+                                "Update required: restore the version-matched backup first, then patch again. This should happen only after ChatGPT or AgentMicro changes."
                             )
                             .fixedSize(horizontal: false, vertical: true)
                         } icon: {
@@ -246,7 +246,7 @@ private struct IntegrationSettingsTab: View {
                         .font(.caption)
                     } else {
                         Text(
-                            "ChatGPT updates remove the local integration. Codex Micro detects the new build and asks before restoring or patching; it never force-quits ChatGPT."
+                            "ChatGPT updates remove the local integration. AgentMicro detects the new build and asks before restoring or patching; it never force-quits ChatGPT."
                         )
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -311,7 +311,7 @@ private struct AdvancedSettingsTab: View {
             }
 
             HStack {
-                Text("Codex Micro \(versionText)")
+                Text("AgentMicro \(versionText)")
                 Spacer()
                 Text("Apple silicon")
             }

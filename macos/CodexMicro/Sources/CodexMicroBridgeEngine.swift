@@ -1,7 +1,7 @@
 import Foundation
 import Darwin
 
-/// Owns the existing Codex Micro bridge graph inside the menu-bar process.
+/// Owns the existing AgentMicro bridge graph inside the menu-bar process.
 /// The BLE and ChatGPT wire protocols intentionally remain unchanged.
 final class CodexMicroBridgeEngine {
     private let server: SocketServer
@@ -78,21 +78,21 @@ final class CodexMicroBridgeEngine {
         vscodeClient.start()
         lights.start()
         bridge.start()
-        log("Codex Micro menu-bar bridge started")
+        log("AgentMicro menu-bar bridge started")
     }
 
     func pause() {
         guard hasStarted, !isPaused else { return }
         isPaused = true
         bridge.stop()
-        log("Codex Micro bridge paused")
+        log("AgentMicro bridge paused")
     }
 
     func resume() {
         guard hasStarted, isPaused else { return }
         isPaused = false
         bridge.start()
-        log("Codex Micro bridge resumed")
+        log("AgentMicro bridge resumed")
     }
 
     func reconnect() {
@@ -102,7 +102,7 @@ final class CodexMicroBridgeEngine {
         }
         isPaused = false
         bridge.reconnect()
-        log("Codex Micro connection restart requested")
+        log("AgentMicro connection restart requested")
     }
 
     func ensureConnection() {

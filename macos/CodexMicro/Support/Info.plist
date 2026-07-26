@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Codex Micro</string>
+	<string>AgentMicro</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIconName</key>
@@ -29,13 +29,13 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Codex Micro uses Bluetooth to connect your iPhone control surface to this Mac.</string>
+	<string>AgentMicro uses Bluetooth to connect your iPhone control surface to this Mac.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>Codex Micro uses Bluetooth to connect your iPhone control surface to this Mac.</string>
+	<string>AgentMicro uses Bluetooth to connect your iPhone control surface to this Mac.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Codex Micro asks ChatGPT to quit normally before an explicit patch or restore, then reopens it.</string>
+	<string>AgentMicro asks ChatGPT to quit normally before an explicit patch or restore, then reopens it.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026. All rights reserved.</string>
 	<key>NSPrincipalClass</key>

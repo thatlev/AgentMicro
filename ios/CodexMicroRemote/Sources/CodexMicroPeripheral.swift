@@ -1,6 +1,6 @@
 //
 //  CodexMicroPeripheral.swift
-//  Bluetooth transport for the Codex Micro Remote protocol.
+//  Bluetooth transport for the AgentMicro bridge protocol.
 //
 //  The iPhone publishes only an app-owned GATT service. The companion macOS
 //  app consumes that service and performs the local ChatGPT integration.
@@ -54,7 +54,7 @@ enum HostVoiceLighting: Equatable {
     case ready       // solid white — the transcript is sitting in the composer, awaiting CODEX
 }
 
-/// One command-key binding as configured in the desktop app's Codex Micro
+/// One command-key binding as configured in the desktop app's AgentMicro
 /// settings: the keycap on the slot plus an optional command override.
 struct KeyBinding: Equatable {
     var keycapId: String
@@ -207,7 +207,7 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
     @Published private(set) var foregroundRenderGeneration = 0
     /// The single lighting-brightness value (0–1) reported by ChatGPT through
     /// `v.oai.rgbcfg`. Nil means the host has not reported its setting yet.
-    /// Brightness is configured only in ChatGPT's Codex Micro settings.
+    /// Brightness is configured only in ChatGPT's AgentMicro settings.
     @Published private(set) var lightingBrightness: Double?
     @Published private(set) var autoDimSeconds: TimeInterval = 180
     @Published private(set) var isLightingDimmed = false
@@ -295,7 +295,7 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
     /// for the previous process, so the Mac helper can refresh only stale links.
     private let advertisingSession = UInt16.random(in: UInt16.min...UInt16.max)
 
-    /// App-owned GATT transport. The Codex Micro macOS companion subscribes to
+    /// App-owned GATT transport. The AgentMicro macOS companion subscribes to
     /// these characteristics and relays the report stream to its local ChatGPT
     /// integration.
     static let bridgeServiceUUID = CBUUID(string: "C0DE0001-6E10-4C0D-A5A5-C0DEB1D6E001")
@@ -403,7 +403,7 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
             UInt8(advertisingSession >> 8),
         ])
         pm.startAdvertising([
-            CBAdvertisementDataLocalNameKey: "Codex Micro",
+            CBAdvertisementDataLocalNameKey: "AgentMicro",
             CBAdvertisementDataServiceUUIDsKey: [Self.bridgeServiceUUID],
             CBAdvertisementDataManufacturerDataKey: sessionData,
         ])
@@ -1305,7 +1305,7 @@ extension CodexMicroPeripheral: CBPeripheralManagerDelegate {
                 servicePublishIndex = 0
                 switch peripheral.state {
                 case .poweredOff:
-                    blockingIssue = "Turn on Bluetooth to start Codex Micro."
+                    blockingIssue = "Turn on Bluetooth to start AgentMicro."
                     setMacConnection(.error, detail: "Bluetooth is off")
                 case .unauthorized:
                     blockingIssue = "Bluetooth access is denied. Allow it in Settings to continue."
@@ -1367,7 +1367,7 @@ extension CodexMicroPeripheral: CBPeripheralManagerDelegate {
                 isAdvertising = peripheral.isAdvertising
                 blockingIssue = nil
                 setMacConnection(.waitingForMac, detail: "Waiting for Mac")
-                log("advertising as 'Codex Micro' for Mac clients")
+                log("advertising as 'AgentMicro' for Mac clients")
             }
         }
     }

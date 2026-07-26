@@ -1,6 +1,6 @@
 //
 //  CodexMicroRemoteApp.swift
-//  CodexMicroRemote — iPhone as a Codex Micro BLE control surface.
+//  AgentMicro — iPhone control surface for coding agents.
 //
 //  Protocol reference: ../../docs/codex-micro-protocol.md
 //

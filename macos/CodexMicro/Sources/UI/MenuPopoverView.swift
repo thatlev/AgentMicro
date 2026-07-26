@@ -48,7 +48,7 @@ struct MenuPopoverView: View {
 
             Divider()
 
-            menuRow("Quit Codex Micro", systemImage: "xmark.square", disabled: model.isBusy) {
+            menuRow("Quit AgentMicro", systemImage: "xmark.square", disabled: model.isBusy) {
                 model.quit()
             }
             .keyboardShortcut("q", modifiers: .command)
@@ -63,7 +63,7 @@ struct MenuPopoverView: View {
             HStack(spacing: 10) {
                 MicroGlyphView(size: 19)
 
-                Text("Codex Micro")
+                Text("AgentMicro")
                     .font(.system(size: 13, weight: .semibold))
 
                 Spacer()
@@ -71,7 +71,7 @@ struct MenuPopoverView: View {
                 if model.isBusy {
                     ProgressView()
                         .controlSize(.small)
-                        .accessibilityLabel("Codex Micro is working")
+                        .accessibilityLabel("AgentMicro is working")
                 } else {
                     StatusPill(text: statusLabel, tone: overallTone)
                 }
@@ -154,7 +154,7 @@ struct MenuPopoverView: View {
 
     private var integrationActionDetail: String {
         if model.integrationNeedsUpdate {
-            return "Restore ChatGPT first, then choose Patch ChatGPT. This is normally needed only after ChatGPT or Codex Micro updates."
+            return "Restore ChatGPT first, then choose Patch ChatGPT. This is normally needed only after ChatGPT or AgentMicro updates."
         }
         return "Patch ChatGPT once to enable the complete iPhone route."
     }

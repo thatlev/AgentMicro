@@ -35,7 +35,7 @@ final class CodexMicroAppDelegate: NSObject, NSApplicationDelegate {
         }
 
         AppLogStore.shared.installBridgeSink()
-        AppLogStore.shared.append("Codex Micro \(versionDescription) launched")
+        AppLogStore.shared.append("AgentMicro \(versionDescription) launched")
 
         let migration = LegacyMigrationManager.disableInvisibleHelperIfNeeded()
         let model = AppModel(legacyMigration: migration)
@@ -63,8 +63,8 @@ final class CodexMicroAppDelegate: NSObject, NSApplicationDelegate {
         alert.alertStyle = .warning
         alert.messageText = "ChatGPT operation in progress"
         alert.informativeText =
-            "Codex Micro must stay open until the current patch or restore finishes safely."
-        alert.addButton(withTitle: "Keep Codex Micro Open")
+            "AgentMicro must stay open until the current patch or restore finishes safely."
+        alert.addButton(withTitle: "Keep AgentMicro Open")
         alert.runModal()
         return .terminateCancel
     }
@@ -108,9 +108,9 @@ final class CodexMicroAppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.alertStyle = .informational
-        alert.messageText = "Move Codex Micro to Applications"
+        alert.messageText = "Move AgentMicro to Applications"
         alert.informativeText =
-            "Drag Codex Micro to the Applications folder before opening it. "
+            "Drag AgentMicro to the Applications folder before opening it. "
             + "Launch at Login and helper migration are not changed while the app is on a disk image."
         alert.addButton(withTitle: "Quit")
         alert.runModal()

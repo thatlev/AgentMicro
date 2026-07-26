@@ -133,7 +133,7 @@ test('socket protocol creates, selects, pins, decorates, inserts, and submits', 
           if (active) {
             active.isPinned = true;
             // Model VS Code's native pinned-editor section moving a newly pinned
-            // webview. Its Codex Micro id must continue naming this exact tab.
+            // webview. Its AgentMicro id must continue naming this exact tab.
             if (active.simulatePinReorder) {
               tabGroup.tabs.splice(tabGroup.tabs.indexOf(active), 1);
               tabGroup.tabs.unshift(active);
@@ -295,7 +295,7 @@ test('socket protocol creates, selects, pins, decorates, inserts, and submits', 
   assert.equal(commands.filter(([command]) => command === 'claude-vscode.toggleDictation').length, 2);
   assert.equal(commands.filter(([command]) => command === 'workbench.action.openEditorAtIndex2').length, 2);
 
-  // Codex Micro pins are a macropad concept only (agent-key LEDs + tab color +
+  // AgentMicro pins are a macropad concept only (agent-key LEDs + tab color +
   // status bar). Applying or removing a pin snapshot must NEVER drive VS Code's
   // own native editor pins: doing so fought the user's mouse (clicking a pinned
   // webview tab re-pinned it, so it "glitched and stayed on") and relied on VS
@@ -312,8 +312,8 @@ test('socket protocol creates, selects, pins, decorates, inserts, and submits', 
   const pinCommandsAfter = commands.filter(([command]) =>
     command === 'workbench.action.pinEditor' || command === 'workbench.action.unpinEditor').length;
   assert.equal(pinCommandsAfter, pinCommandsBaseline,
-    'applying or removing Codex Micro pins never issues a native pin/unpin command');
-  assert.equal(claudeTab.isPinned, false, 'a webview tab is never natively pinned by Codex Micro');
+    'applying or removing AgentMicro pins never issues a native pin/unpin command');
+  assert.equal(claudeTab.isPinned, false, 'a webview tab is never natively pinned by AgentMicro');
 
   // Regression: a stale bridge selection on the first Claude chat must not make
   // both it and the genuinely active third chat report `active`. Only VS Code's

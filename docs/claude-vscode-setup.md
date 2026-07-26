@@ -1,6 +1,6 @@
-# Codex Micro → VS Code setup
+# AgentMicro → VS Code setup
 
-Use the Codex Micro macropad (iPhone app or the built-in emulator) to drive the
+Use AgentMicro (the iPhone app or built-in emulator) to drive the
 **Claude Code VS Code extension** — and Codex / Kimi CLIs running in terminals —
 with live agent-status lighting on the six agent keys. No patching of Claude,
 VS Code, or any extension: a small additive companion extension + the bridge
@@ -14,15 +14,15 @@ helper do it entirely through public APIs.
   Claude Code, OpenAI Codex/ChatGPT, or Moonshot Kimi Code.
 - Terminal launchers require their executable (`claude`, `codex`, or `kimi`) on
   the shell PATH inherited by VS Code.
-- Live blue/green/amber/red states come from Codex Micro's lifecycle
+- Live blue/green/amber/red states come from AgentMicro's lifecycle
   hooks in `~/Library/Caches/CodexMicro/status.json`. No extra daemon is needed
-  if the Codex Micro status feed already tracks those sessions.
+  if the AgentMicro status feed already tracks those sessions.
 - Claude editor-chat targets use Claude's own dictation while the key is held.
   Codex, Kimi, terminals, normal editor tabs, and auto-send use iPhone speech.
   The first iPhone-capture press asks for Microphone and Speech Recognition
   permission; it does not require the Siri/keyboard Dictation switch.
-iPhone (BLE) ─▶ codexbridge (auto) ─▶ $TMPDIR/codexbridge-vscode.sock ─▶ Codex Micro VSCode extension ─▶ executeCommand / terminal.sendText
-             ◀── agent-key LEDs ◀── Codex Micro status.json ◀── Claude/Codex/Kimi lifecycle hooks
+iPhone (BLE) ─▶ codexbridge (auto) ─▶ $TMPDIR/codexbridge-vscode.sock ─▶ AgentMicro VS Code extension ─▶ executeCommand / terminal.sendText
+             ◀── agent-key LEDs ◀── AgentMicro status.json ◀── Claude/Codex/Kimi lifecycle hooks
 ```
 
 ## One-time install
@@ -32,7 +32,7 @@ iPhone (BLE) ─▶ codexbridge (auto) ─▶ $TMPDIR/codexbridge-vscode.sock �
    code --install-extension "vscode/CodexMicroVSCode/codex-micro-vscode-0.5.1.vsix" --force
    ```
    Then run **Developer: Reload Window**. Confirm with the palette command
-   **Codex Micro: Show bridge status** — it should say it is listening.
+   **AgentMicro: Show bridge status** — it should say it is listening.
 
 2. **Build the bridge helper** (once, or after editing it):
    ```bash
@@ -108,7 +108,7 @@ one ordered operation bound to the chat selected at touch-down.
 
 ## Agent-key lighting
 
-The bridge reads Codex Micro's `~/Library/Caches/CodexMicro/status.json` (fed by the
+The bridge reads AgentMicro's legacy-compatible `~/Library/Caches/CodexMicro/status.json` (fed by the
 Claude/Codex/Kimi lifecycle hooks already in `~/.claude/settings.json`) and
 lights only explicitly pinned targets. It matches target ID first, then the
 concrete provider/workspace; unrelated global strip-slot numbers
@@ -127,9 +127,9 @@ The lights **self-heal**: the bridge re-emits every 15 s, and the iPhone
 re-requests the latest state every 8 s while foreground, so a dropped BLE frame
 or an idle period never leaves the LEDs frozen. (In ChatGPT mode the same
 heartbeat re-syncs from ChatGPT's cache; if its hardware lights still go dark,
-raise **Auto-off** in ChatGPT's Codex Micro settings.)
+raise **Auto-off** in ChatGPT's AgentMicro settings.)
 
 Pinned file-resource editor tabs receive the same solid semantic label colors;
 the selected tab stays VS Code's normal gray. VS Code does not expose a public
 per-tab color setter for terminal or third-party webview tabs, so those targets
-show the live color in the Codex Micro status-bar item instead.
+show the live color in the AgentMicro status-bar item instead.

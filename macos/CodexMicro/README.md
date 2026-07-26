@@ -1,6 +1,6 @@
-# Codex Micro for macOS
+# AgentMicro for macOS
 
-Codex Micro is a native macOS 14+ menu-bar app. It contains the existing
+AgentMicro is a native macOS 14+ menu-bar app. It contains the existing
 Bluetooth-to-ChatGPT bridge, setup and diagnostics UI, and explicit controls
 for applying or restoring the reversible ChatGPT integration.
 
@@ -28,13 +28,13 @@ Run either script from any working directory:
 The build script recreates `dist/` and produces:
 
 ```text
-dist/Codex Micro.app
+dist/AgentMicro.app
 ```
 
 The packaging script builds the app and then produces:
 
 ```text
-dist/Codex-Micro-1.0.0-arm64.dmg
+dist/AgentMicro-1.0.0-arm64.dmg
 ```
 
 Pass `--skip-build` to `package-dmg.sh` only when the app in `dist/` is already
@@ -46,7 +46,7 @@ Distribution builds contain their own Apple Silicon Node.js executable and a
 locked `@electron/asar` dependency tree under:
 
 ```text
-Codex Micro.app/Contents/Resources/PatchRuntime
+AgentMicro.app/Contents/Resources/PatchRuntime
 ```
 
 Users do not need Node.js, npm, or a network download to patch or restore
@@ -66,7 +66,7 @@ Mac.
 
 Fresh ChatGPT patches keep a complete, version-matched backup under
 `~/Library/Application Support/CodexMicro/Backups/`. A complete backup can be
-roughly the size of ChatGPT itself. Codex Micro checks available disk space
+roughly the size of ChatGPT itself. AgentMicro checks available disk space
 before staging a patch and does not automatically delete old backups. Older
 backups can be removed manually after the corresponding ChatGPT version is no
 longer needed.
@@ -80,7 +80,7 @@ signed; reinstall ChatGPT to recover OpenAI's signature.
 
 1. Stop direct T3 Code or any command-line bridge that currently owns the
    iPhone's BLE connection.
-2. Keep Codex Micro Remote open on the iPhone.
+2. Keep AgentMicro open on the iPhone.
 3. Choose **Reconnect** from the Mac menu-bar popover.
 4. Open ChatGPT.
 5. If Integration says **Update required**, choose **Restore ChatGPT**, wait

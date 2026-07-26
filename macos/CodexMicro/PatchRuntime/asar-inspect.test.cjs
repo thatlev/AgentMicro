@@ -189,7 +189,7 @@ try {
   const newer = inspectFixture(temporaryDirectory, 'schema-3');
   assert.equal(newer.exitCode, 2);
   assert.equal(newer.value.state, 'incompatible');
-  assert.match(newer.value.reason, /newer Codex Micro version/);
+  assert.match(newer.value.reason, /newer AgentMicro version/);
 
   const currentStatus = patchStatusFixture(temporaryDirectory, 'current');
   assert.equal(currentStatus.patchState, 'compatible-patched');

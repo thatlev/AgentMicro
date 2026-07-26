@@ -157,7 +157,7 @@ struct PatchActionButtons: View {
                 return Alert(
                     title: Text("Patch ChatGPT?"),
                     message: Text(
-                        "Codex Micro will ask ChatGPT to close normally, modify its local app resources, re-sign it locally, then reopen it. ChatGPT may ask you to sign in or approve permissions again, and an update will remove the patch. Codex Micro never force-quits ChatGPT."
+                        "AgentMicro will ask ChatGPT to close normally, modify its local app resources, re-sign it locally, then reopen it. ChatGPT may ask you to sign in or approve permissions again, and an update will remove the patch. AgentMicro never force-quits ChatGPT."
                     ),
                     primaryButton: .default(Text("Patch & Reopen")) {
                         model.patchChatGPT()
@@ -168,7 +168,7 @@ struct PatchActionButtons: View {
                 return Alert(
                     title: Text("Restore ChatGPT?"),
                     message: Text(
-                        "Codex Micro will ask ChatGPT to close normally, validate and restore the version-matched backup, then reopen it. Migrated legacy backups remain locally signed; reinstall ChatGPT to recover OpenAI’s signature. Codex Micro never force-quits ChatGPT."
+                        "AgentMicro will ask ChatGPT to close normally, validate and restore the version-matched backup, then reopen it. Migrated legacy backups remain locally signed; reinstall ChatGPT to recover OpenAI’s signature. AgentMicro never force-quits ChatGPT."
                     ),
                     primaryButton: .default(Text("Restore & Reopen")) {
                         model.restoreChatGPT()
@@ -183,7 +183,7 @@ struct PatchActionButtons: View {
         ActionButton(
             title: "Patch ChatGPT",
             systemImage: "wrench.and.screwdriver",
-            help: "Apply the Codex Micro integration after confirmation.",
+            help: "Apply the AgentMicro integration after confirmation.",
             isDisabled: model.isBusy || !model.canPatch
         ) {
             pendingAction = .patch

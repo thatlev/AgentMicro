@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Codex Micro Remote</string>
+	<string>AgentMicro</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -31,13 +31,13 @@
 		<true/>
 	</dict>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Codex Micro Remote turns your iPhone into a control surface for the Codex and Claude desktop apps over Bluetooth.</string>
+	<string>AgentMicro turns your iPhone into a control surface for the Codex and Claude desktop apps over Bluetooth.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Codex Micro Remote connects directly to your T3 Code server on the local network.</string>
+	<string>AgentMicro connects directly to your T3 Code server on the local network.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Codex Micro Remote records only while you hold a workspace microphone key so it can transcribe a prompt on this iPhone.</string>
+	<string>AgentMicro records only while you hold a workspace microphone key so it can transcribe a prompt on this iPhone.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Codex Micro Remote turns your spoken workspace prompts into text on this iPhone.</string>
+	<string>AgentMicro turns your spoken workspace prompts into text on this iPhone.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>bluetooth-peripheral</string>

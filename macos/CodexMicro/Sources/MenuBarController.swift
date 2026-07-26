@@ -37,8 +37,8 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         button.target = self
         button.action = #selector(togglePopover(_:))
         button.sendAction(on: [.leftMouseUp])
-        button.setAccessibilityLabel("Codex Micro")
-        button.setAccessibilityHelp("Open Codex Micro connection status and controls.")
+        button.setAccessibilityLabel("AgentMicro")
+        button.setAccessibilityHelp("Open AgentMicro connection status and controls.")
 
         statusDot.frame = NSRect(
             x: max(button.bounds.maxX - 8, 14),
@@ -115,7 +115,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         statusDot.color = tone.nsColor
 
         let stateDescription = tone.accessibilityDescription
-        let tooltip = "Codex Micro — \(model.headline)\n\(model.detail)"
+        let tooltip = "AgentMicro — \(model.headline)\n\(model.detail)"
         button.toolTip = tooltip
         button.setAccessibilityValue(stateDescription)
         button.setAccessibilityHelp("\(tooltip). Click to open status and controls.")
@@ -147,7 +147,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
                 rootView: SettingsView(model: model)
             )
             let window = NSWindow(contentViewController: hostingController)
-            window.title = "Codex Micro Settings"
+            window.title = "AgentMicro Settings"
             window.identifier = NSUserInterfaceItemIdentifier("CodexMicroSettings")
             window.styleMask = [.titled, .closable, .miniaturizable]
             window.setContentSize(NSSize(width: 620, height: 480))

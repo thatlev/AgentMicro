@@ -384,7 +384,7 @@ public final class T3KeychainCredentialStore: T3CredentialStoring, @unchecked Se
         ]
         let attributes: [String: Any] = [
             kSecValueData as String: data,
-            kSecAttrLabel as String: "CodexMicro T3 Code access",
+            kSecAttrLabel as String: "AgentMicro T3 Code access",
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
         ]
 
@@ -1403,7 +1403,7 @@ public final class T3Backend: @unchecked Sendable {
                       let origin = URL(string: location.state.origin) else {
                     throw T3BackendIssue(
                         code: .runtimeUnavailable,
-                        message: "Start T3 Code before pairing CodexMicro."
+                        message: "Start T3 Code before pairing AgentMicro."
                     )
                 }
                 self.bootstrap(origin: origin, credential: credential, completion: completion)
@@ -1621,7 +1621,7 @@ public final class T3Backend: @unchecked Sendable {
                     ("subject_token_type", "urn:t3:params:oauth:token-type:environment-bootstrap"),
                     ("requested_token_type", "urn:ietf:params:oauth:token-type:access_token"),
                     ("scope", "orchestration:read orchestration:operate"),
-                    ("client_label", "CodexMicro Bridge"),
+                    ("client_label", "AgentMicro Bridge"),
                     ("client_device_type", "bot"),
                     ("client_os", "macOS"),
                 ]
@@ -2111,7 +2111,7 @@ public final class T3Backend: @unchecked Sendable {
         guard let credential = try credentials.load(environmentID: environmentID) else {
             throw T3BackendIssue(
                 code: .needsPairing,
-                message: "T3 is running, but CodexMicro has not been paired with it."
+                message: "T3 is running, but AgentMicro has not been paired with it."
             )
         }
         guard !credential.isExpired() else {

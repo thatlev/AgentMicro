@@ -155,7 +155,7 @@ enum CodexMicroGlyph {
             return true
         }
         image.isTemplate = true
-        image.accessibilityDescription = "Codex Micro"
+        image.accessibilityDescription = "AgentMicro"
         return image
     }()
 }

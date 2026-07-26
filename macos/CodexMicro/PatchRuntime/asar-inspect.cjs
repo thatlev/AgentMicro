@@ -308,7 +308,7 @@ try {
       state: 'compatible-patched',
       patched: true,
       compatible: true,
-      reason: 'The Codex Micro patch is installed and matches this ChatGPT build.',
+      reason: 'The AgentMicro patch is installed and matches this ChatGPT build.',
       details,
     });
   }
@@ -321,7 +321,7 @@ try {
       patched: true,
       compatible: false,
       reason:
-        'The Codex Micro integration needs an update. Choose Restore ChatGPT, then Patch ChatGPT to install the current integration.',
+        'The AgentMicro integration needs an update. Choose Restore ChatGPT, then Patch ChatGPT to install the current integration.',
       details,
     }, 2);
   }
@@ -331,7 +331,7 @@ try {
       patched: true,
       compatible: false,
       reason:
-        'This ChatGPT integration was installed by a newer Codex Micro version. Update Codex Micro before changing it.',
+        'This ChatGPT integration was installed by a newer AgentMicro version. Update AgentMicro before changing it.',
       details,
     }, 2);
   }

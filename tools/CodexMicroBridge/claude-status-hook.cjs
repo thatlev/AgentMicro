@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 'use strict';
 
-// Codex Micro — Claude Code status feed.
+// AgentMicro — Claude Code status feed.
 //
 // Claude Code fires lifecycle hooks; this tiny hook translates them into the
-// CodexMicro status file the Codex Micro bridge already reads
+// legacy CodexMicro status file the AgentMicro bridge already reads
 // (~/Library/Caches/CodexMicro/status.json), so a pinned Claude conversation's
 // agent key lights BLUE while it is working, AMBER when it needs input, and
 // GREEN when it completes — instead of always white.

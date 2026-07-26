@@ -34,7 +34,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.thislev.codexmicro
-        PRODUCT_NAME: Codex Micro
+        PRODUCT_NAME: AgentMicro
         EXECUTABLE_NAME: CodexMicro
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"

@@ -21,8 +21,8 @@
 	<key>LSBackgroundOnly</key>
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Codex Bridge uses Bluetooth to connect the Codex Micro controller to this Mac.</string>
+	<string>AgentMicro Bridge uses Bluetooth to connect the AgentMicro controller to this Mac.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>Codex Bridge uses Bluetooth to connect the Codex Micro controller to this Mac.</string>
+	<string>AgentMicro Bridge uses Bluetooth to connect the AgentMicro controller to this Mac.</string>
 </dict>
 </plist>

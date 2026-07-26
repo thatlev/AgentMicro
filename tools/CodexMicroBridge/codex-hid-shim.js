@@ -378,7 +378,7 @@ function createBridge() {
 
   const HIDAsync = {
     async open() {
-      if (!present) throw new Error('Codex Micro bridge: no device present');
+      if (!present) throw new Error('AgentMicro bridge: no device present');
       return new BridgeHIDAsync();
     },
   };

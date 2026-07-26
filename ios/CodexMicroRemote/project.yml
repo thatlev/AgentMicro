@@ -11,20 +11,21 @@ targets:
     info:
       path: Support/Info.plist
       properties:
-        CFBundleDisplayName: Codex Micro Remote
+        CFBundleDisplayName: AgentMicro
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         "UISupportedInterfaceOrientations~ipad": [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
-        NSBluetoothAlwaysUsageDescription: Codex Micro Remote turns your iPhone into a control surface for the Codex and Claude desktop apps over Bluetooth.
-        NSMicrophoneUsageDescription: Codex Micro Remote records only while you hold a workspace microphone key so it can transcribe a prompt on this iPhone.
-        NSSpeechRecognitionUsageDescription: Codex Micro Remote turns your spoken workspace prompts into text on this iPhone.
-        NSLocalNetworkUsageDescription: Codex Micro Remote connects directly to your T3 Code server on the local network.
+        NSBluetoothAlwaysUsageDescription: AgentMicro turns your iPhone into a control surface for the Codex and Claude desktop apps over Bluetooth.
+        NSMicrophoneUsageDescription: AgentMicro records only while you hold a workspace microphone key so it can transcribe a prompt on this iPhone.
+        NSSpeechRecognitionUsageDescription: AgentMicro turns your spoken workspace prompts into text on this iPhone.
+        NSLocalNetworkUsageDescription: AgentMicro connects directly to your T3 Code server on the local network.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         LSApplicationQueriesSchemes: [claude, t3code]
         UIBackgroundModes: [bluetooth-peripheral]
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: io.github.thislev.codexmicroremote
+      PRODUCT_NAME: AgentMicro
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       DEVELOPMENT_TEAM: Q6TQ7WFCK5
       CODE_SIGN_STYLE: Automatic

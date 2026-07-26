@@ -11,7 +11,7 @@ GENERATED_PROJECT_ROOT="$BUILD_ROOT/GeneratedProject"
 DERIVED_DATA_ROOT="$BUILD_ROOT/DerivedData"
 PRODUCTS_ROOT="$BUILD_ROOT/Products"
 RUNTIME_ROOT="$BUILD_ROOT/PatchRuntime"
-APP_NAME="Codex Micro.app"
+APP_NAME="AgentMicro.app"
 APP_PATH="$DIST_ROOT/$APP_NAME"
 
 NODE_VERSION="24.18.0"
@@ -193,7 +193,7 @@ xcodegen generate \
     --project-root "$MACOS_ROOT" \
     --quiet
 
-log "building Codex Micro for macOS 14+ on Apple Silicon"
+log "building AgentMicro for macOS 14+ on Apple Silicon"
 xcodebuild \
     -project "$GENERATED_PROJECT_ROOT/CodexMicro.xcodeproj" \
     -scheme CodexMicro \

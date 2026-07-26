@@ -1,11 +1,15 @@
-# Codex Micro
+# AgentMicro
 
-Codex Micro turns an iPhone into a Bluetooth control surface. This checkout
+AgentMicro turns an iPhone into a Bluetooth control surface. This checkout
 contains two Mac connection paths:
+
+Existing bundle IDs, storage directories, socket names, and protocol identifiers
+retain their `CodexMicro` values so installed builds upgrade in place and remain
+compatible with ChatGPT's physical Codex Micro protocol.
 
 - **T3 Code direct:** T3 Code connects straight to the iPhone's private BLE
   service. The current iPhone UI is intentionally T3-only.
-- **ChatGPT companion:** the native Codex Micro menu-bar app owns Bluetooth,
+- **ChatGPT companion:** the native AgentMicro menu-bar app owns Bluetooth,
   a reversible ChatGPT integration, launch at login, diagnostics, and strict
   end-to-end connection status.
 
@@ -18,7 +22,7 @@ before testing the menu-bar bridge.
 Direct T3 Code:
 
 ```text
-Codex Micro Remote on iPhone ⟷ encrypted private BLE ⟷ T3 Code for macOS
+AgentMicro on iPhone ⟷ encrypted private BLE ⟷ T3 Code for macOS
 ```
 
 ChatGPT companion:
@@ -26,9 +30,9 @@ ChatGPT companion:
 ```text
 ChatGPT integration
         ⟷ $TMPDIR/CodexMicro/codexbridge.sock
-        ⟷ Codex Micro menu-bar app
+        ⟷ AgentMicro menu-bar app
         ⟷ encrypted private BLE
-        ⟷ Codex Micro Remote on iPhone
+        ⟷ AgentMicro on iPhone
 ```
 
 The companion temporarily provides `/tmp/codexbridge.sock` as a migration
@@ -65,10 +69,10 @@ pnpm dev:desktop
 
 Test direct T3 control:
 
-1. Pause or quit the Codex Micro menu-bar bridge.
-2. Keep Codex Micro Remote open on the iPhone.
-3. In T3 Code, open **Settings → Codex Micro → Connect iPhone**.
-4. Select **Codex Micro** and accept the Bluetooth pairing prompts.
+1. Pause or quit the AgentMicro menu-bar bridge.
+2. Keep AgentMicro open on the iPhone.
+3. In T3 Code, open **Settings → AgentMicro → Connect iPhone**.
+4. Select **AgentMicro** and accept the Bluetooth pairing prompts.
 5. Confirm T3 reports **Connected** and shows the iPhone battery.
 6. Test all six thread keys, pin/unpin, NEW, joystick navigation, encoder
    model/effort changes, approve, decline, send, and dictation.
@@ -89,8 +93,8 @@ build:
 Outputs:
 
 ```text
-dist/Codex Micro.app
-dist/Codex-Micro-1.0.0-arm64.dmg
+dist/AgentMicro.app
+dist/AgentMicro-1.0.0-arm64.dmg
 ```
 
 The default build is ad-hoc signed for local testing on this Mac. Public DMG
@@ -100,7 +104,7 @@ distribution requires Developer ID signing, notarization, and stapling. See
 ## Test the menu-bar companion
 
 1. Disconnect direct T3 Code so the menu app can own Bluetooth.
-2. Copy **Codex Micro.app** to `/Applications` and open it.
+2. Copy **AgentMicro.app** to `/Applications` and open it.
 3. Keep the iPhone app open and click **Reconnect** in the menu.
 4. If Integration says **Update required**, choose **Restore ChatGPT**, wait
    for it to reopen, then choose **Patch ChatGPT**. If it says
@@ -131,16 +135,16 @@ the healthy state when its proof becomes stale.
 
 ## Clean reconnect
 
-1. Stop any other T3 or command-line process using the Codex Micro BLE device.
-2. Open Codex Micro Remote on the iPhone.
-3. Open the Codex Micro menu and choose **Reconnect**.
+1. Stop any other T3 or command-line process using the AgentMicro BLE device.
+2. Open AgentMicro on the iPhone.
+3. Open the AgentMicro menu and choose **Reconnect**.
 4. Open ChatGPT.
 5. Resolve **Update required** with **Restore → Patch**, or resolve
    **Patch required** with **Patch**.
 6. Wait for **Verified**. Do not treat a Bluetooth-only link as fully
    connected.
 
-Patch and restore are explicit, confirmed operations. Codex Micro asks ChatGPT
+Patch and restore are explicit, confirmed operations. AgentMicro asks ChatGPT
 to close normally and aborts if it does not; it never force-quits ChatGPT.
 
 ## Development bridge

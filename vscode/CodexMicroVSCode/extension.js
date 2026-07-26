@@ -1,4 +1,4 @@
-// Codex Micro — VSCode bridge companion extension.
+// AgentMicro — VS Code bridge companion extension.
 //
 // Opens a local Unix-domain socket that `codexbridge --target vscode` connects
 // to. The macropad's key events arrive as small JSON ops; this extension turns
@@ -72,7 +72,7 @@ function providerFor(name) {
 }
 
 function activate(context) {
-  const out = vscode.window.createOutputChannel('Codex Micro bridge');
+  const out = vscode.window.createOutputChannel('AgentMicro bridge');
   const log = (m) => out.appendLine(`${new Date().toISOString()} ${m}`);
 
   // Stable ids for terminals across list rebuilds (terminals reorder/close).
@@ -118,7 +118,7 @@ function activate(context) {
   let slotStatuses = Array(6).fill('off');
   const nativeVoiceCommands = new Set();
   const nativeVoiceActiveTargets = new Set();
-  // Codex Micro pins are a macropad concept: they live in `pinnedTargetIds`
+  // AgentMicro pins are a macropad concept: they live in `pinnedTargetIds`
   // (mirrored from the bridge's PinMap) and drive the agent-key LEDs, the tab
   // color decoration, and the status-bar item. They are deliberately NOT
   // mirrored onto VS Code's own native editor pins. Doing so used to fight the
@@ -162,14 +162,14 @@ function activate(context) {
       if (!colorId) return undefined;
       return {
         badge: '●',
-        tooltip: `Codex Micro agent ${slot + 1}: ${status.replace('_', ' ')}`,
+        tooltip: `AgentMicro agent ${slot + 1}: ${status.replace('_', ' ')}`,
         color: new vscode.ThemeColor(colorId),
         propagate: false,
       };
     },
   };
   const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 90);
-  statusItem.name = 'Codex Micro selected agent';
+  statusItem.name = 'AgentMicro selected agent';
   statusItem.command = 'codexMicro.showStatus';
 
   function workspaceCwd(uri) {
@@ -538,7 +538,7 @@ function activate(context) {
     const slot = pinnedTargetIds.indexOf(selectedTargetId);
     const status = slot >= 0 ? slotStatuses[slot] : 'off';
     statusItem.text = `$(remote) ${selected.label}${slot >= 0 ? ` · ${slot + 1}` : ''}`;
-    statusItem.tooltip = `Codex Micro selected target${slot >= 0 ? `, pinned to agent key ${slot + 1}` : ''}`;
+    statusItem.tooltip = `AgentMicro selected target${slot >= 0 ? `, pinned to agent key ${slot + 1}` : ''}`;
     statusItem.color = STATUS_COLORS[status] ? new vscode.ThemeColor(STATUS_COLORS[status]) : undefined;
     statusItem.show();
   }
@@ -970,8 +970,8 @@ function activate(context) {
       log(`socket=${socketPath()} hubOwner=${ownsSocket} clients=${count} windows=${windowCount} targets=${targetCount}`);
       vscode.window.showInformationMessage(
         ownsSocket
-          ? `Codex Micro bridge: ${count} helper client(s), ${windowCount} VS Code window(s), ${targetCount} concrete targets.`
-          : `Codex Micro bridge: this project is registered with the multi-window hub. Socket ${socketPath()}`);
+          ? `AgentMicro bridge: ${count} helper client(s), ${windowCount} VS Code window(s), ${targetCount} concrete targets.`
+          : `AgentMicro bridge: this project is registered with the multi-window hub. Socket ${socketPath()}`);
     }),
   ];
   subs.push(vscode.window.registerFileDecorationProvider(decorationProvider));

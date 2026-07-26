@@ -1,6 +1,6 @@
 # PatchRuntime bundle layout
 
-The DMG build stages this directory into `Codex Micro.app/Contents/Resources/PatchRuntime`.
+The DMG build stages this directory into `AgentMicro.app/Contents/Resources/PatchRuntime`.
 It must contain:
 
 ```text
@@ -37,7 +37,7 @@ downloads code at runtime.
 
 ## Backup retention
 
-Codex Micro retains one complete pristine `ChatGPT.app` backup for every patched
+AgentMicro retains one complete pristine `ChatGPT.app` backup for every patched
 ChatGPT version/build. Complete backups are intentionally never pruned
 automatically because they are the only way to restore OpenAI's original
 signature after local patching. Disk use therefore grows when several ChatGPT

@@ -21,7 +21,7 @@ enum OverallState: Equatable {
 @MainActor
 final class AppModel: ObservableObject {
     @Published private(set) var overallState: OverallState = .connecting
-    @Published private(set) var headline = "Starting Codex Micro"
+    @Published private(set) var headline = "Starting AgentMicro"
     @Published private(set) var detail = "Checking the iPhone and ChatGPT integration."
     @Published private(set) var phoneStatus = "Starting"
     @Published private(set) var chatGPTStatus = "Checking"
@@ -266,7 +266,7 @@ final class AppModel: ObservableObject {
             .map { ISO8601DateFormatter().string(from: $0) }
             ?? "never"
         let report = """
-        Codex Micro diagnostics
+        AgentMicro diagnostics
         Generated: \(ISO8601DateFormatter().string(from: Date()))
         App: \(version) (\(build))
         macOS: \(ProcessInfo.processInfo.operatingSystemVersionString)
@@ -353,20 +353,20 @@ final class AppModel: ObservableObject {
         if let operationMessage {
             overallState = .connecting
             headline = patchManager.progress?.message ?? operationMessage
-            detail = "Codex Micro is waiting for the current operation to finish safely."
+            detail = "AgentMicro is waiting for the current operation to finish safely."
             return
         }
         if isPaused {
             overallState = .idle
             headline = "Bridge paused"
-            detail = "Resume Codex Micro to reconnect the iPhone and ChatGPT."
+            detail = "Resume AgentMicro to reconnect the iPhone and ChatGPT."
             return
         }
         if legacyMigration.requiresAttention {
             overallState = .actionRequired
             headline = "Previous helper needs attention"
             detail = legacyMigration.notes.first
-                ?? "Codex Micro could not safely finish migrating the previous helper."
+                ?? "AgentMicro could not safely finish migrating the previous helper."
             return
         }
 
@@ -384,7 +384,7 @@ final class AppModel: ObservableObject {
         case .compatiblePristine:
             overallState = .actionRequired
             headline = "ChatGPT needs the integration"
-            detail = "Use Patch ChatGPT once, then Codex Micro can verify the complete route."
+            detail = "Use Patch ChatGPT once, then AgentMicro can verify the complete route."
             return
         case .integrationUpdateRequired:
             overallState = .actionRequired
@@ -404,7 +404,7 @@ final class AppModel: ObservableObject {
         case .denied:
             overallState = .actionRequired
             headline = "Bluetooth permission required"
-            detail = "Allow Codex Micro in System Settings › Privacy & Security › Bluetooth."
+            detail = "Allow AgentMicro in System Settings › Privacy & Security › Bluetooth."
         case .poweredOff:
             overallState = .actionRequired
             headline = "Bluetooth is off"
@@ -416,7 +416,7 @@ final class AppModel: ObservableObject {
         case .unknown, .scanning:
             overallState = .connecting
             headline = "Looking for your iPhone"
-            detail = "Open Codex Micro on the iPhone and keep it nearby."
+            detail = "Open AgentMicro on the iPhone and keep it nearby."
         case .connecting:
             overallState = .connecting
             headline = "Connecting to iPhone"
@@ -622,9 +622,9 @@ final class AppModel: ObservableObject {
         content.title = "ChatGPT integration needs attention"
         switch snapshot.state {
         case .compatiblePristine:
-            content.body = "A ChatGPT build without the Codex Micro integration was detected."
+            content.body = "A ChatGPT build without the AgentMicro integration was detected."
         case .integrationUpdateRequired:
-            content.body = "Restore ChatGPT, then patch it to update the Codex Micro integration."
+            content.body = "Restore ChatGPT, then patch it to update the AgentMicro integration."
         default:
             content.body = "This ChatGPT build no longer matches the supported integration."
         }

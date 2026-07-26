@@ -90,9 +90,9 @@ enum PatchManagerError: LocalizedError {
         case .busy:
             return "Another ChatGPT patch operation is already running."
         case .missingScript:
-            return "The Codex Micro patch runtime is incomplete."
+            return "The AgentMicro patch runtime is incomplete."
         case .invalidStatus:
-            return "Codex Micro received an invalid ChatGPT status response."
+            return "AgentMicro received an invalid ChatGPT status response."
         case .launchFailed(let message):
             return "The ChatGPT patch manager could not start: \(message)"
         }

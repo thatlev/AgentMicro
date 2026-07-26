@@ -1,7 +1,7 @@
 {
   "name": "codex-micro-vscode",
-  "displayName": "Codex Micro — VSCode bridge",
-  "description": "Lets the Codex Micro macropad (via codexbridge --target vscode) drive editor tabs and agent terminals: focus a pinned tab, approve/reject Claude diffs, and send keys to Codex/Kimi CLIs.",
+  "displayName": "AgentMicro — VS Code bridge",
+  "description": "Lets the AgentMicro iPhone control surface (via codexbridge --target vscode) drive editor tabs and agent terminals: focus a pinned tab, approve/reject Claude diffs, and send keys to Codex/Kimi CLIs.",
   "version": "0.6.0",
   "publisher": "codexmicro",
   "engines": { "vscode": "^1.90.0" },
@@ -13,38 +13,38 @@
     "commands": [
       {
         "command": "codexMicro.showStatus",
-        "title": "Codex Micro: Show bridge status"
+        "title": "AgentMicro: Show bridge status"
       }
     ],
     "colors": [
       {
         "id": "codexMicro.statusIdle",
-        "description": "Codex Micro idle agent tab color.",
+        "description": "AgentMicro idle agent tab color.",
         "defaults": { "dark": "#FFFFFF", "light": "#5B616B", "highContrast": "#FFFFFF", "highContrastLight": "#1F2328" }
       },
       {
         "id": "codexMicro.statusWorking",
-        "description": "Codex Micro working agent tab color.",
+        "description": "AgentMicro working agent tab color.",
         "defaults": { "dark": "#5B7CFF", "light": "#304FFE", "highContrast": "#6C8AFF", "highContrastLight": "#2038B8" }
       },
       {
         "id": "codexMicro.statusComplete",
-        "description": "Codex Micro completed agent tab color.",
+        "description": "AgentMicro completed agent tab color.",
         "defaults": { "dark": "#00D941", "light": "#087A30", "highContrast": "#20F060", "highContrastLight": "#076427" }
       },
       {
         "id": "codexMicro.statusNeedsInput",
-        "description": "Codex Micro needs-input agent tab color.",
+        "description": "AgentMicro needs-input agent tab color.",
         "defaults": { "dark": "#FFAA2B", "light": "#A85A00", "highContrast": "#FFC266", "highContrastLight": "#7A4100" }
       },
       {
         "id": "codexMicro.statusError",
-        "description": "Codex Micro failed agent tab color.",
+        "description": "AgentMicro failed agent tab color.",
         "defaults": { "dark": "#FF4968", "light": "#C41436", "highContrast": "#FF6B83", "highContrastLight": "#A30F2B" }
       }
     ],
     "configuration": {
-      "title": "Codex Micro bridge",
+      "title": "AgentMicro bridge",
       "properties": {
         "codexMicro.socketPath": {
           "type": "string",
@@ -69,7 +69,7 @@
         "codexMicro.decorateTabs": {
           "type": "boolean",
           "default": true,
-          "description": "Color pinned file-editor tab labels from CodexMicro agent status. Selected tabs keep the normal VS Code selected color."
+          "description": "Color pinned file-editor tab labels from AgentMicro agent status. Selected tabs keep the normal VS Code selected color."
         }
       }
     }

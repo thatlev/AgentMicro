@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DIST_ROOT="$REPO_ROOT/dist"
-APP_PATH="$DIST_ROOT/Codex Micro.app"
+APP_PATH="$DIST_ROOT/AgentMicro.app"
 STAGING_ROOT="$DIST_ROOT/.dmg-staging"
 SIGN_IDENTITY="${MACOS_SIGN_IDENTITY:--}"
 NOTARY_PROFILE="${MACOS_NOTARY_PROFILE:-}"
@@ -47,14 +47,14 @@ fi
 [[ -d "$APP_PATH" ]] || die "built app not found; run scripts/build-macos.sh first"
 
 VERSION="$(plutil -extract CFBundleShortVersionString raw -o - "$APP_PATH/Contents/Info.plist")"
-DMG_PATH="$DIST_ROOT/Codex-Micro-${VERSION}-arm64.dmg"
+DMG_PATH="$DIST_ROOT/AgentMicro-${VERSION}-arm64.dmg"
 
 trap cleanup EXIT
 cleanup
 mkdir -p "$STAGING_ROOT"
 
 log "preparing a readable installer volume"
-ditto "$APP_PATH" "$STAGING_ROOT/Codex Micro.app"
+ditto "$APP_PATH" "$STAGING_ROOT/AgentMicro.app"
 ln -s /Applications "$STAGING_ROOT/Applications"
 install -m 0644 \
     "$REPO_ROOT/macos/CodexMicro/Support/DMG-README.txt" \
@@ -62,7 +62,7 @@ install -m 0644 \
 
 rm -f "$DMG_PATH"
 hdiutil create \
-    -volname "Codex Micro" \
+    -volname "AgentMicro" \
     -srcfolder "$STAGING_ROOT" \
     -format UDZO \
     -imagekey zlib-level=9 \

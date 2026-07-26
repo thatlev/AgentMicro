@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Reversible ChatGPT patch manager for Codex Micro.
+# Reversible ChatGPT patch manager for AgentMicro.
 #
 # The distributed menu-bar app supplies a pinned Node runtime, @electron/asar,
 # the read-only ASAR inspector, and the bridge shim through PatchRuntime. A
@@ -58,7 +58,7 @@ while [ "$#" -gt 0 ]; do
             sed -n '2,29p' "$0"
             exit 0
             ;;
-        *) printf 'Codex Micro patcher: unknown argument: %s\n' "$1" >&2; exit 64 ;;
+        *) printf 'AgentMicro patcher: unknown argument: %s\n' "$1" >&2; exit 64 ;;
     esac
     shift
 done
@@ -86,7 +86,7 @@ emit_event() {
 }
 
 log() {
-    printf '[Codex Micro] %s\n' "$*" >&2
+    printf '[AgentMicro] %s\n' "$*" >&2
 }
 
 die() {
@@ -94,7 +94,7 @@ die() {
     local message="$2"
     local code="${3:-1}"
     emit_event "error" "$stage" "$message"
-    printf '[Codex Micro] ERROR: %s\n' "$message" >&2
+    printf '[AgentMicro] ERROR: %s\n' "$message" >&2
     exit "$code"
 }
 
@@ -448,9 +448,9 @@ inspect_installation() {
     STATUS_REASON="$(json_field "$inspection_json" reason)"
     if [ "$PATCH_STATE" = "integration-update-required" ]; then
         if [ "$BACKUP_AVAILABLE" = true ]; then
-            STATUS_REASON="The Codex Micro integration needs an update. Choose Restore ChatGPT, then Patch ChatGPT to install the current integration."
+            STATUS_REASON="The AgentMicro integration needs an update. Choose Restore ChatGPT, then Patch ChatGPT to install the current integration."
         else
-            STATUS_REASON="The Codex Micro integration needs an update, but no exact backup is available. Reinstall ChatGPT, then choose Patch ChatGPT."
+            STATUS_REASON="The AgentMicro integration needs an update, but no exact backup is available. Reinstall ChatGPT, then choose Patch ChatGPT."
         fi
     fi
 }
@@ -505,13 +505,13 @@ LOCK_DIR="$LOCK_PARENT/.patch-operation.lock"
 if [ -d "$LOCK_DIR" ]; then
     lock_pid="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
     if [ -n "$lock_pid" ] && kill -0 "$lock_pid" 2>/dev/null; then
-        die "busy" "Another Codex Micro patch or restore operation is already running." 75
+        die "busy" "Another AgentMicro patch or restore operation is already running." 75
     fi
     rm -f "$LOCK_DIR/pid" 2>/dev/null || true
     rmdir "$LOCK_DIR" 2>/dev/null || true
 fi
 mkdir "$LOCK_DIR" 2>/dev/null \
-    || die "permission" "Codex Micro could not create its operation lock." 77
+    || die "permission" "AgentMicro could not create its operation lock." 77
 printf '%s\n' "$$" > "$LOCK_DIR/pid"
 
 request_chatgpt_quit() {
@@ -656,7 +656,7 @@ ensure_pristine_backup() {
 }
 
 app_management_error() {
-    die "permission" "macOS blocked changes to ChatGPT.app. Allow Codex Micro under Privacy & Security › App Management, then try again." 77
+    die "permission" "macOS blocked changes to ChatGPT.app. Allow AgentMicro under Privacy & Security › App Management, then try again." 77
 }
 
 nearest_existing_path() {
@@ -681,7 +681,7 @@ require_free_space() {
     local required_megabytes
     app_kilobytes="$(/usr/bin/du -sk "$APP" | awk '{print $1}')"
     [ -n "$app_kilobytes" ] \
-        || die "storage" "Codex Micro could not determine the ChatGPT app size."
+        || die "storage" "AgentMicro could not determine the ChatGPT app size."
 
     # Keep 512 MiB untouched in addition to conservative whole-app copies for
     # extraction, staging, installation, and (when needed) a retained backup.
@@ -702,7 +702,7 @@ require_free_space() {
         checked_devices="$checked_devices $device"
         available="$(available_kilobytes "$existing")"
         [ -n "$available" ] \
-            || die "storage" "Codex Micro could not determine free space for $existing."
+            || die "storage" "AgentMicro could not determine free space for $existing."
         if [ "$available" -lt "$required_kilobytes" ]; then
             die "storage" \
                 "At least ${required_megabytes} MiB of free space is required before staging ChatGPT; $existing does not have enough."
@@ -848,7 +848,7 @@ if [ "$MODE" = "restore" ]; then
             swap_in_staged_app "$STAGED_APP"
             relaunch_chatgpt_if_requested
             emit_event "result" "complete" \
-                "Pristine ChatGPT resources were restored. This app is locally signed, not OpenAI-signed; you can now patch it again with Codex Micro." 1
+                "Pristine ChatGPT resources were restored. This app is locally signed, not OpenAI-signed; you can now patch it again with AgentMicro." 1
             exit 0
             ;;
         *)
@@ -860,13 +860,13 @@ fi
 # A fully compatible installed patch is an idempotent success. In particular,
 # never overwrite a missing pristine backup with an already-patched app.
 if [ "$PATCH_STATE" = "compatible-patched" ]; then
-    emit_event "result" "complete" "The Codex Micro patch is already installed and compatible." 1
+    emit_event "result" "complete" "The AgentMicro patch is already installed and compatible." 1
     exit 0
 fi
 
 [ "$PATCH_STATE" = "compatible-pristine" ] \
     || die "preflight" "$STATUS_REASON"
-[ -n "$SHIM_SRC" ] || die "runtime" "The bundled Codex Micro bridge shim is missing."
+[ -n "$SHIM_SRC" ] || die "runtime" "The bundled AgentMicro bridge shim is missing."
 [ -n "$ASAR_MODE" ] \
     || die "runtime" "The bundled @electron/asar runtime is missing; no download was attempted."
 
@@ -896,13 +896,13 @@ run_asar extract "$ASAR_PATH" "$EXTRACTED" \
 /usr/bin/ditto --rsrc "$RESOURCES/app.asar.unpacked/" "$EXTRACTED/" \
     || die "extracting" "The native unpacked resources could not be staged."
 
-emit_event "progress" "patching" "Installing the Codex Micro bridge shim…" 0.38
+emit_event "progress" "patching" "Installing the AgentMicro bridge shim…" 0.38
 cp "$SHIM_SRC" "$EXTRACTED/codex-hid-shim.js"
 
 NODEHID_DIR="$(find "$EXTRACTED/node_modules/@worklouder" -type d -name node-hid 2>/dev/null | head -1)"
 [ -n "$NODEHID_DIR" ] || die "patching" "The expected Work Louder node-hid package was not found."
 cat > "$NODEHID_DIR/nodehid.js" <<'NODEHID_EOF'
-// node-hid replacement — installed by patch-chatgpt.sh (Codex Micro bridge).
+// node-hid replacement — installed by patch-chatgpt.sh (AgentMicro bridge).
 'use strict';
 
 const path = require('path');
@@ -920,7 +920,7 @@ module.exports = require(shimPath).nodehid;
 NODEHID_EOF
 
 SERVICE_BUNDLE="$(find "$EXTRACTED/.vite/build" -maxdepth 1 -type f -name 'codex-micro-service-*.js' | head -1)"
-[ -n "$SERVICE_BUNDLE" ] || die "patching" "The expected Codex Micro service bundle was not found."
+[ -n "$SERVICE_BUNDLE" ] || die "patching" "The expected AgentMicro service bundle was not found."
 SERVICE_BUNDLE="$SERVICE_BUNDLE" "$NODE_BIN" <<'PATCH_SERVICE_EOF'
 const fs = require('fs');
 const file = process.env.SERVICE_BUNDLE;
@@ -1048,7 +1048,7 @@ CURRENT_INFO_HASH="$(/usr/bin/shasum -a 256 "$APP_INFO" | awk '{print $1}')"
     && [ "$CURRENT_INFO_HASH" = "$ORIGINAL_INFO_HASH" ] \
     || die "installing" "ChatGPT changed during patch preparation. No files were replaced; try again."
 
-emit_event "progress" "installing" "Installing the validated Codex Micro patch…" 0.92
+emit_event "progress" "installing" "Installing the validated AgentMicro patch…" 0.92
 swap_in_staged_app "$STAGED_APP"
 relaunch_chatgpt_if_requested
-emit_event "result" "complete" "The Codex Micro patch was installed successfully." 1
+emit_event "result" "complete" "The AgentMicro patch was installed successfully." 1

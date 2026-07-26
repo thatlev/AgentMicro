@@ -1,6 +1,6 @@
-# Codex Micro — VSCode bridge
+# AgentMicro — VS Code bridge
 
-Companion VS Code extension that lets the Codex Micro macropad (an iPhone
+Companion VS Code extension that lets AgentMicro (an iPhone
 running CodexMicroRemote, or the `--emulate` keypad) drive your editor through
 the default hybrid `codexbridge` mode.
 
@@ -31,7 +31,7 @@ when the concrete target and installed provider actually support it.
 code --install-extension codex-micro-vscode-0.6.0.vsix --force
 ```
 
-Then **Developer: Reload Window** (or restart VS Code). Run **Codex Micro: Show
+Then **Developer: Reload Window** (or restart VS Code). Run **AgentMicro: Show
 bridge status** from the command palette to confirm it is listening.
 
 ## Settings
@@ -47,7 +47,7 @@ bridge status** from the command palette to confirm it is listening.
 - VS Code exposes file-tab decorations, but no public API to recolor an
   individual terminal or third-party webview tab after creation. File tabs get
   the requested label color; all target kinds also get the same live color in
-  the Codex Micro status item. Pinned third-party editor tabs receive VS Code's
+  the AgentMicro status item. Pinned third-party editor tabs receive VS Code's
   native editor-pin glyph; pre-existing manual editor pins are left untouched.
   The selected target keeps VS Code's normal gray.
 - Text insertion/submission into third-party webviews uses VS Code's public

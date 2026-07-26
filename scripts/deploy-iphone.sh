@@ -7,7 +7,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROJECT="$REPO_ROOT/ios/CodexMicroRemote/CodexMicroRemote.xcodeproj"
 DERIVED_DATA="$REPO_ROOT/build/ios-device"
 DEVICE_NAME="${1:-iPhone L}"
-APP_PATH="$DERIVED_DATA/Build/Products/Debug-iphoneos/CodexMicroRemote.app"
+APP_PATH="$DERIVED_DATA/Build/Products/Debug-iphoneos/AgentMicro.app"
 BUNDLE_ID="io.github.thislev.codexmicroremote"
 
 log() {
@@ -23,7 +23,7 @@ log() {
     exit 1
 }
 
-log "building CodexMicroRemote for $DEVICE_NAME"
+log "building AgentMicro for $DEVICE_NAME"
 xcodebuild \
     -project "$PROJECT" \
     -scheme CodexMicroRemote \

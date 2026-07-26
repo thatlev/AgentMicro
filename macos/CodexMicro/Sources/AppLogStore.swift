@@ -42,7 +42,7 @@ final class AppLogStore {
     func recentText(maximumBytes: Int = 64 * 1024) -> String {
         flush()
         guard let handle = try? FileHandle(forReadingFrom: logURL) else {
-            return "No Codex Micro log has been written yet."
+            return "No AgentMicro log has been written yet."
         }
         defer { try? handle.close() }
         let size = (try? handle.seekToEnd()) ?? 0
