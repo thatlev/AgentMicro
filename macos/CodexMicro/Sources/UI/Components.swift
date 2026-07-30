@@ -135,6 +135,8 @@ struct PatchActionButtons: View {
 
     @ObservedObject var model: AppModel
     var compact = false
+    var onDialogPresented: () -> Void = {}
+    var onDialogDismissed: () -> Void = {}
     @State private var pendingAction: PendingAction?
 
     var body: some View {
@@ -160,9 +162,14 @@ struct PatchActionButtons: View {
                         "AgentMicro will ask ChatGPT to close normally, modify its local app resources, re-sign it locally, then reopen it. ChatGPT may ask you to sign in or approve permissions again, and an update will remove the patch. AgentMicro never force-quits ChatGPT."
                     ),
                     primaryButton: .default(Text("Patch & Reopen")) {
+                        pendingAction = nil
+                        onDialogDismissed()
                         model.patchChatGPT()
                     },
-                    secondaryButton: .cancel()
+                    secondaryButton: .cancel(Text("Cancel")) {
+                        pendingAction = nil
+                        onDialogDismissed()
+                    }
                 )
             case .restore:
                 return Alert(
@@ -171,9 +178,14 @@ struct PatchActionButtons: View {
                         "AgentMicro will ask ChatGPT to close normally, validate and restore the version-matched backup, then reopen it. Migrated legacy backups remain locally signed; reinstall ChatGPT to recover OpenAI’s signature. AgentMicro never force-quits ChatGPT."
                     ),
                     primaryButton: .default(Text("Restore & Reopen")) {
+                        pendingAction = nil
+                        onDialogDismissed()
                         model.restoreChatGPT()
                     },
-                    secondaryButton: .cancel()
+                    secondaryButton: .cancel(Text("Cancel")) {
+                        pendingAction = nil
+                        onDialogDismissed()
+                    }
                 )
             }
         }
@@ -186,6 +198,7 @@ struct PatchActionButtons: View {
             help: "Apply the AgentMicro integration after confirmation.",
             isDisabled: model.isBusy || !model.canPatch
         ) {
+            onDialogPresented()
             pendingAction = .patch
         }
     }
@@ -197,6 +210,7 @@ struct PatchActionButtons: View {
             help: "Restore ChatGPT to its original files after confirmation.",
             isDisabled: model.isBusy || !model.canRestore
         ) {
+            onDialogPresented()
             pendingAction = .restore
         }
     }

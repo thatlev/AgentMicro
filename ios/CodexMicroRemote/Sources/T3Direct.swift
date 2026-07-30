@@ -130,6 +130,10 @@ final class T3DirectController {
     /// reassigns the peripheral's @Published state and re-renders the settings
     /// sheet, making it lag and jump. We only push when the payload differs.
     private var lastPublishSignature: Data?
+    /// Completion version acknowledged by opening each target. A completed
+    /// target stays white after it has been checked and turns green again only
+    /// when a newer completion arrives.
+    private var acknowledgedCompletionByTarget: [String: String] = [:]
 
     private static let originDefaultsKey = "codexMicro.t3.origin"
 
@@ -239,6 +243,7 @@ final class T3DirectController {
         UserDefaults.standard.removeObject(forKey: Self.originDefaultsKey)
         latest = nil
         lastPublishSignature = nil
+        acknowledgedCompletionByTarget.removeAll()
         publish()
     }
 
@@ -273,6 +278,14 @@ final class T3DirectController {
     // MARK: Snapshot → workspace-state dict
 
     private func ingest(_ snapshot: T3BackendSnapshot) {
+        if let selected = snapshot.pins.selectedTargetID,
+           let target = snapshot.targets.first(where: { $0.id == selected }),
+           target.status == .done {
+            acknowledgedCompletionByTarget[selected] = target.updatedAt
+        }
+        for target in snapshot.targets where target.status == .working {
+            acknowledgedCompletionByTarget[target.id] = nil
+        }
         latest = snapshot
         // Surface phase changes in the app's Protocol log so a disconnect is
         // diagnosable. T3Backend already retries with backoff on its own, so we
@@ -355,12 +368,32 @@ final class T3DirectController {
             guard let id = pins[key], let target = targets.first(where: { $0.id == id }) else {
                 return ["id": key, "c": 0, "b": 0, "e": 0, "s": 0, "status": "off"]
             }
-            if id == selected {
-                return ["id": key, "c": 0xFFFFFF, "b": 1, "e": 4, "s": 0.4, "status": "selected"]
-            }
             let status = Self.statusName(target.status)
+            let completionWasRead =
+                status == "complete" && acknowledgedCompletionByTarget[id] == target.updatedAt
+            // Breathing is reserved for the one case that means "this chat,
+            // right now": the selected key while it is blue (working).
+            // Everything else stays solid, including a working chat you are
+            // not in and the selected-but-idle key.
+            if id == selected {
+                let isWorking = status == "working"
+                let selectedColor = completionWasRead || status == "idle"
+                    ? 0xFFFFFF
+                    : (Self.statusColors[status]?.0 ?? 0xFFFFFF)
+                return [
+                    "id": key,
+                    "c": selectedColor,
+                    "b": 1,
+                    "e": isWorking ? 4 : 1,
+                    "s": isWorking ? 0.4 : 0,
+                    "status": completionWasRead ? "selected" : status,
+                ]
+            }
+            if completionWasRead {
+                return ["id": key, "c": 0xFFFFFF, "b": 1, "e": 1, "s": 0, "status": "idle"]
+            }
             if let color = Self.statusColors[status] {
-                return ["id": key, "c": color.0, "b": 1, "e": color.1, "s": color.2, "status": status]
+                return ["id": key, "c": color.0, "b": 1, "e": 1, "s": 0, "status": status]
             }
             return ["id": key, "c": 0xFFFFFF, "b": 1, "e": 1, "s": 0, "status": "idle"]
         }

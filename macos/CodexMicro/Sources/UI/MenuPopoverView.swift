@@ -6,6 +6,9 @@ import SwiftUI
 struct MenuPopoverView: View {
     @ObservedObject var model: AppModel
     let onOpenSettings: () -> Void
+    let onQuit: () -> Void
+    let onDialogPresented: () -> Void
+    let onDialogDismissed: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -49,7 +52,7 @@ struct MenuPopoverView: View {
             Divider()
 
             menuRow("Quit AgentMicro", systemImage: "xmark.square", disabled: model.isBusy) {
-                model.quit()
+                onQuit()
             }
             .keyboardShortcut("q", modifiers: .command)
             .padding(8)
@@ -110,7 +113,12 @@ struct MenuPopoverView: View {
                     .foregroundStyle(StatusTone.actionRequired.color)
             }
 
-            PatchActionButtons(model: model, compact: true)
+            PatchActionButtons(
+                model: model,
+                compact: true,
+                onDialogPresented: onDialogPresented,
+                onDialogDismissed: onDialogDismissed
+            )
         }
         .padding(12)
         .background(
@@ -130,12 +138,18 @@ struct MenuPopoverView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.callout)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-                .padding(.horizontal, 8)
-                .frame(height: 32)
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .frame(width: 16)
+
+                Text(title)
+
+                Spacer(minLength: 0)
+            }
+            .font(.callout)
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(disabled)

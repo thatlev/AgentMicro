@@ -40,10 +40,15 @@ struct CodexMicroRemoteApp: App {
                     // display on keeps the link up. Restored when we leave the
                     // foreground so we never block auto-lock in the background.
                     UIApplication.shared.isIdleTimerDisabled = (phase == .active)
-                    if phase == .active {
-                        peripheral.applicationDidBecomeActive()
-                    } else {
+                    // `.inactive` is a momentary interruption the user is still
+                    // in the middle of: a notification banner, Control Center,
+                    // the app switcher, Face ID. Treating it as "left the app"
+                    // stopped the heartbeat mid-use, which the Mac reads as the
+                    // app going away. Only a real background transition ends it.
+                    if phase == .background {
                         peripheral.applicationWillResignActive()
+                    } else if phase == .active {
+                        peripheral.applicationDidBecomeActive()
                     }
                 }
         }

@@ -116,8 +116,8 @@ final class CodexMicroBridgeEngine {
 
     func shutdown() {
         guard hasStarted else { return }
-        bridge.stop()
-        server.stop()
+        bridge.shutdown()
+        server.stop(suppressCompanionAutoLaunch: true)
         LegacySocketAlias.removeIfOwned(target: socketPath)
         hasStarted = false
         isPaused = true
@@ -173,6 +173,14 @@ final class CodexMicroBridgeEngine {
             }
         }
 
+        // `reemitActiveSurface` already avoids *starting* the fallback
+        // controller while the packaged T3 app is attached, but once started
+        // its backend keeps polling on its own. Without this guard those
+        // snapshots race the packaged app's frames and repaint the board.
+        t3Controller.shouldPublish = { [weak self] in
+            guard let self else { return false }
+            return self.server.t3ClientCount() == 0
+        }
         t3Controller.onPublish = {
             [weak self] targets, pins, selected, connected, slots, issue, nativeVoiceActive in
             guard let self else { return }
@@ -252,7 +260,12 @@ final class CodexMicroBridgeEngine {
             vscodeController.refreshState()
             lights.emit()
         case "t3code":
-            t3Controller.activate()
+            // The packaged T3 app owns its configurable surface while its
+            // socket client is attached. Starting the menu companion's fallback
+            // controller at the same time would publish competing state.
+            if server.t3ClientCount() == 0 {
+                t3Controller.activate()
+            }
         case "claude-desktop":
             claudeDesktopController.refreshState()
         default:

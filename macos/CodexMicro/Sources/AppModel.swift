@@ -323,10 +323,6 @@ final class AppModel: ObservableObject {
         showOnboarding = false
     }
 
-    func quit() {
-        NSApp.terminate(nil)
-    }
-
     private func refreshPatchStatus() async {
         guard !isBusy else { return }
         await patchManager.refresh()

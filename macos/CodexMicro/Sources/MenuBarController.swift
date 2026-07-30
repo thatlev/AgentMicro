@@ -5,14 +5,20 @@ import SwiftUI
 @MainActor
 final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     private let model: AppModel
+    private let onQuit: () -> Void
     private let statusItem: NSStatusItem
     private let popover = NSPopover()
     private let statusDot = StatusDotView()
     private var subscriptions = Set<AnyCancellable>()
     private var settingsWindowController: NSWindowController?
+    private var localEventMonitor: Any?
+    private var globalEventMonitor: Any?
+    private var appResignActiveObserver: NSObjectProtocol?
+    private var isDialogPresented = false
 
-    init(model: AppModel) {
+    init(model: AppModel, onQuit: @escaping () -> Void) {
         self.model = model
+        self.onQuit = onQuit
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
 
@@ -51,14 +57,25 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     }
 
     private func configurePopover() {
-        popover.behavior = .transient
+        // Keep one owner for dismissal. AppKit's transient/semitransient
+        // behaviors compete with alert windows and event monitors, especially
+        // while another app owns a full-screen Space. With applicationDefined,
+        // this controller alone opens and closes the popover.
+        popover.behavior = .applicationDefined
         popover.animates = true
         popover.delegate = self
         popover.contentSize = NSSize(width: 310, height: 330)
         popover.contentViewController = NSHostingController(
             rootView: MenuPopoverView(
                 model: model,
-                onOpenSettings: { [weak self] in self?.showSettings() }
+                onOpenSettings: { [weak self] in self?.showSettings() },
+                onQuit: { [weak self] in self?.requestQuit() },
+                onDialogPresented: { [weak self] in
+                    self?.isDialogPresented = true
+                },
+                onDialogDismissed: { [weak self] in
+                    self?.restorePopoverInteractionAfterDialog()
+                }
             )
         )
     }
@@ -130,17 +147,143 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     @objc
     private func togglePopover(_ sender: Any?) {
         if popover.isShown {
-            popover.performClose(sender)
+            closePopover()
             return
         }
 
         guard let button = statusItem.button else { return }
+        endDismissalMonitoring()
+        popover.animates = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         model.refreshStatus()
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        configurePopoverWindow()
+        beginDismissalMonitoring()
+    }
+
+    /// Usage4Claude promotes its shown popover to a key pop-up-menu-level window.
+    /// Besides keeping it above normal app windows, this gives AppKit ownership
+    /// of the active appearance and the complete system presentation transition.
+    private func configurePopoverWindow() {
+        guard let popoverWindow = popover.contentViewController?.view.window else { return }
+        popoverWindow.level = .popUpMenu
+        popoverWindow.collectionBehavior.insert(.fullScreenAuxiliary)
+
+        // A window can only become key while its app is active, and app
+        // activation completes asynchronously. Re-assert key status on the
+        // following run-loop turns as well; without a key popover window,
+        // SwiftUI treats every click as window activation and the buttons
+        // never fire.
+        NSApp.activate(ignoringOtherApps: true)
+        popoverWindow.makeKeyAndOrderFront(nil)
+        DispatchQueue.main.async { [weak popoverWindow] in
+            popoverWindow?.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    private func closePopover() {
+        guard popover.isShown else {
+            isDialogPresented = false
+            endDismissalMonitoring()
+            return
+        }
+
+        isDialogPresented = false
+        endDismissalMonitoring()
+        popover.animates = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        popover.performClose(nil)
+    }
+
+    private func requestQuit() {
+        // Finish the popover's mouse event before asking AppKit to terminate.
+        // Terminating synchronously from inside SwiftUI's button transaction
+        // can leave the popover/event tracking loop owning the first request.
+        closePopover()
+        DispatchQueue.main.async { [onQuit] in
+            onQuit()
+        }
+    }
+
+    private func beginDismissalMonitoring() {
+        endDismissalMonitoring()
+
+        localEventMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.keyDown]
+        ) { [weak self] event in
+            guard let self else { return event }
+            guard event.keyCode == 53 else { return event }
+            self.closePopover()
+            return nil
+        }
+
+        globalEventMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown]
+        ) { [weak self] _ in
+            DispatchQueue.main.async {
+                guard let self, !self.isDialogPresented else { return }
+                // Global monitors receive events delivered to other apps, not
+                // this app. Local alert and popover clicks therefore never
+                // enter the outside-click dismissal path.
+                self.closePopover()
+            }
+        }
+
+        appResignActiveObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didResignActiveNotification,
+            object: NSApp,
+            queue: .main
+        ) { [weak self] _ in
+            DispatchQueue.main.async {
+                guard let self,
+                      self.popover.isShown,
+                      !self.isDialogPresented,
+                      !NSApp.isActive else {
+                    return
+                }
+                self.closePopover()
+            }
+        }
+    }
+
+    private func endDismissalMonitoring() {
+        if let localEventMonitor {
+            NSEvent.removeMonitor(localEventMonitor)
+            self.localEventMonitor = nil
+        }
+        if let globalEventMonitor {
+            NSEvent.removeMonitor(globalEventMonitor)
+            self.globalEventMonitor = nil
+        }
+        if let appResignActiveObserver {
+            NotificationCenter.default.removeObserver(appResignActiveObserver)
+            self.appResignActiveObserver = nil
+        }
+    }
+
+    private func restorePopoverInteractionAfterDialog() {
+        isDialogPresented = false
+
+        // SwiftUI dismisses its alert after invoking the button action. Restore
+        // on the next run-loop turn so the alert window has relinquished key
+        // status before the popover is promoted again.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.popover.isShown else { return }
+            self.configurePopoverWindow()
+        }
+    }
+
+    func popoverDidShow(_ notification: Notification) {
+        // By the time the popover finishes presenting, the activation request
+        // has completed, so this is the reliable point to make it key.
+        configurePopoverWindow()
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        isDialogPresented = false
+        endDismissalMonitoring()
     }
 
     private func showSettings() {
-        popover.performClose(nil)
+        closePopover()
 
         if settingsWindowController == nil {
             let hostingController = NSHostingController(

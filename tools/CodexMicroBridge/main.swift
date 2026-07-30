@@ -63,7 +63,7 @@ enum AppActivator {
                 log("raise: no running app for bundle id \(bundleIdentifier)")
                 return
             }
-            app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+            app.activate(options: [.activateAllWindows])
         }
     }
 }
@@ -109,12 +109,23 @@ enum T3DesktopCommand {
         open(components.url)
     }
 
+    /// Raising before a deep link is not sufficient for every Electron window:
+    /// the URL handler can finish creating/replacing its renderer after macOS
+    /// processed the first activation. Re-raise after the desktop action has
+    /// landed so NEW has the same foreground behavior as focusing a chat.
+    static func bringToFrontAfterDesktopAction() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            AppActivator.activate(bundleIdentifier: bundleIdentifier)
+        }
+    }
+
     private static func open(_ url: URL?) {
         AppActivator.activate(bundleIdentifier: bundleIdentifier)
         guard let url else { return }
         DispatchQueue.main.async {
             NSWorkspace.shared.open(url)
         }
+        bringToFrontAfterDesktopAction()
     }
 }
 
@@ -252,7 +263,14 @@ final class SocketServer {
     private var clients: Set<Int32> = []
     private var clientRoles: [Int32: ClientRole] = [:]
     private let lock = NSLock()
+    /// Virtual HID device presence, as ChatGPT's shim sees it. Deliberately
+    /// flapped by `requestHostResync()` to make ChatGPT re-detect the device.
     private var present = false
+    /// Whether the iPhone is actually linked over Bluetooth. Tracked separately
+    /// because the two answer different questions: the resync trick makes the
+    /// HID device vanish for 1.5s while the phone never moved, and a T3 client
+    /// told about that reads it as the phone disconnecting.
+    private var phonePresent = false
 
     /// Host -> device reports arriving from the shim ('O' frames).
     var onOutput: (Data) -> Void = { _ in }
@@ -271,6 +289,15 @@ final class SocketServer {
                 withIntermediateDirectories: true,
                 attributes: [.posixPermissions: 0o700]
             )
+            // An intentional menu-app quit temporarily removes search
+            // permission from this private directory so T3 Code can
+            // distinguish "the user quit" (EACCES) from a crash
+            // (ENOENT/ECONNREFUSED). A manual or login launch always restores
+            // the owner-only directory before binding the socket.
+            guard chmod(directory, 0o700) == 0 else {
+                log("FATAL: cannot restore socket directory permissions: \(errnoString())")
+                exit(1)
+            }
         }
         unlink(path)
         serverFD = socket(AF_UNIX, SOCK_STREAM, 0)
@@ -308,7 +335,7 @@ final class SocketServer {
         }
     }
 
-    func stop() {
+    func stop(suppressCompanionAutoLaunch: Bool = false) {
         lock.lock()
         let connectedClients = Array(clients)
         clients.removeAll()
@@ -316,7 +343,21 @@ final class SocketServer {
         let descriptor = serverFD
         serverFD = -1
         present = false
+        phonePresent = false
         lock.unlock()
+
+        // T3 Code deliberately opens AgentMicro after ENOENT or
+        // ECONNREFUSED so crashes self-heal. Before closing its live socket on
+        // an intentional app quit, make the private parent unsearchable. Its
+        // reconnect then gets EACCES and does not reopen the app. start()
+        // reverses this on the next explicit/login launch.
+        if suppressCompanionAutoLaunch {
+            unlink(path)
+            let directory = (path as NSString).deletingLastPathComponent
+            if !directory.isEmpty, chmod(directory, 0) != 0 {
+                log("could not suppress companion relaunch: \(errnoString())")
+            }
+        }
 
         for client in connectedClients {
             shutdown(client, SHUT_RDWR)
@@ -325,7 +366,9 @@ final class SocketServer {
             shutdown(descriptor, SHUT_RDWR)
             close(descriptor)
         }
-        unlink(path)
+        if !suppressCompanionAutoLaunch {
+            unlink(path)
+        }
         DispatchQueue.main.async { [weak self] in
             self?.onClientCountChange(0)
         }
@@ -382,9 +425,13 @@ final class SocketServer {
         }
         let changed = clientRoles[fd] != .t3Code
         clientRoles[fd] = .t3Code
+        let linked = phonePresent
         lock.unlock()
         guard changed else { return }
         log("T3 Code transport attached")
+        // It connected as a shim and may have been handed the HID device's
+        // presence; replace that with the phone-link answer for its role.
+        send(tagPresence, payload: Data([linked ? 1 : 0]), to: fd)
         let count = clientCount()
         DispatchQueue.main.async { [weak self] in self?.onClientCountChange(count) }
     }
@@ -439,14 +486,31 @@ final class SocketServer {
     }
 
     /// Device plugged/unplugged; remembered for clients that connect later.
+    /// Shim clients only: this tracks the *virtual HID device*, which the host
+    /// resync deliberately drops and re-raises. T3 clients are told about the
+    /// phone link instead, via `setPhonePresent`.
     func setPresent(_ next: Bool) {
         lock.lock()
         let changed = present != next
         present = next
+        let targets = clients.filter { clientRoles[$0] != .t3Code }
         lock.unlock()
         guard changed else { return }
         log("device \(next ? "present" : "absent")")
-        broadcast(tagPresence, payload: Data([next ? 1 : 0]))
+        for fd in targets { send(tagPresence, payload: Data([next ? 1 : 0]), to: fd) }
+    }
+
+    /// The iPhone link came up or went down for real. Only T3 clients see this;
+    /// it is the presence they actually care about.
+    func setPhonePresent(_ next: Bool) {
+        lock.lock()
+        let changed = phonePresent != next
+        phonePresent = next
+        let targets = clients.filter { clientRoles[$0] == .t3Code }
+        lock.unlock()
+        guard changed else { return }
+        log("iPhone \(next ? "linked" : "unlinked")")
+        for fd in targets { send(tagPresence, payload: Data([next ? 1 : 0]), to: fd) }
     }
 
     /// Device -> host report. The report must already include report ID 6.
@@ -733,12 +797,30 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     private var healthCheckTimeoutWorkItem: DispatchWorkItem?
     private var healthProbeWorkItem: DispatchWorkItem?
     private let healthProbeInterval: TimeInterval = 30
+    /// Slow re-drive of the end-to-end handshake while the link is yellow
+    /// (`.recovering`) but the transport is intact — see scheduleRecoveryRetry.
+    private var recoveryRetryWorkItem: DispatchWorkItem?
+    private let recoveryRetryInterval: TimeInterval = 8
     private var phoneLivenessWorkItem: DispatchWorkItem?
-    /// The foreground iPhone app sends an idempotent refresh every eight
-    /// seconds. Requiring one within three heartbeat windows prevents a cached
-    /// CoreBluetooth subscription from keeping the menu status healthy after
-    /// the mobile app has been closed or suspended.
-    private let phoneLivenessTimeout: TimeInterval = 26
+    /// How long the link may go quiet before the helper checks on the app.
+    ///
+    /// The only unsolicited device→Mac traffic is the iPhone app's foreground
+    /// heartbeat, and iOS stops that timer the moment the app is not frontmost
+    /// — backgrounded, screen locked, even a notification banner. Silence
+    /// therefore says nothing about whether the app can still serve, so it no
+    /// longer condemns the link on its own: it only triggers the probe below.
+    private let phoneLivenessTimeout: TimeInterval = 40
+    /// How long the probe waits for an answer before the app is declared gone.
+    /// A backgrounded app answers a GATT-delivered RPC in well under a second;
+    /// this is generous enough to survive a stalled radio moment.
+    private let livenessProbeTimeout: TimeInterval = 8
+    private var livenessProbeWorkItem: DispatchWorkItem?
+    private var livenessProbeSequence = 0
+    /// Id of the most recent liveness probe, kept so its reply can be filtered
+    /// out of the stream ChatGPT sees. Replaced rather than cleared: a stale id
+    /// can never match, because only this helper ever mints one.
+    private var pendingLivenessProbeID: String?
+    private var suppressingLivenessResponse = false
     private var lastPhoneActivityAt: Date?
     private var cachedAgentSlots: [[String: Any]]?
     private var cachedZones: [String: Any]?
@@ -777,7 +859,11 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     func start() {
         shouldRun = true
         if central == nil {
-            central = CBCentralManager(delegate: self, queue: nil)
+            central = CBCentralManager(
+                delegate: self,
+                queue: nil,
+                options: [CBCentralManagerOptionShowPowerAlertKey: false]
+            )
         } else {
             startScanning()
             publishStatus()
@@ -785,18 +871,37 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     }
 
     func stop() {
+        tearDown(disconnectBluetooth: true, publishStoppedState: true)
+    }
+
+    /// Process termination must not initiate another CoreBluetooth operation:
+    /// macOS may otherwise surface a pending Bluetooth system prompt while the
+    /// user is explicitly quitting. The OS owns radio disconnection when this
+    /// process exits, so only detach delegates and clear local transport state.
+    func shutdown() {
+        tearDown(disconnectBluetooth: false, publishStoppedState: false)
+    }
+
+    private func tearDown(disconnectBluetooth: Bool, publishStoppedState: Bool) {
         shouldRun = false
         healthCheckTimeoutWorkItem?.cancel()
         healthCheckTimeoutWorkItem = nil
         healthProbeWorkItem?.cancel()
         healthProbeWorkItem = nil
+        recoveryRetryWorkItem?.cancel()
+        recoveryRetryWorkItem = nil
         phoneLivenessWorkItem?.cancel()
         phoneLivenessWorkItem = nil
         presenceDropWorkItem?.cancel()
         presenceDropWorkItem = nil
-        central?.stopScan()
-        if let phone {
-            central?.cancelPeripheralConnection(phone)
+        if disconnectBluetooth {
+            central?.stopScan()
+            if let phone {
+                central?.cancelPeripheralConnection(phone)
+            }
+        } else {
+            central?.delegate = nil
+            phone?.delegate = nil
         }
         outputChar = nil
         phone = nil
@@ -806,8 +911,11 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         lastPhoneActivityAt = nil
         pendingWrites.removeAll()
         server.setPresent(false)
+        server.setPhonePresent(false)
         bluetoothState = .unknown
-        setEndToEndState(.recovering, detail: "Bridge paused", force: true)
+        if publishStoppedState {
+            setEndToEndState(.recovering, detail: "Bridge paused", force: true)
+        }
     }
 
     func reconnect() {
@@ -840,6 +948,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         case .unauthorized:
             bluetoothState = .denied
             server.setPresent(false)
+            server.setPhonePresent(false)
 #if CODEX_MICRO_MENU_APP
             log("Bluetooth access denied. Allow AgentMicro in System Settings › Privacy & Security › Bluetooth, then choose Reconnect.")
 #else
@@ -848,10 +957,12 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         case .poweredOff:
             bluetoothState = .poweredOff
             server.setPresent(false)
+            server.setPhonePresent(false)
             log("Bluetooth is off — turn it on in System Settings")
         case .unsupported:
             bluetoothState = .unavailable
             server.setPresent(false)
+            server.setPhonePresent(false)
             log("this Mac does not support Bluetooth LE")
         default:
             bluetoothState = .unknown
@@ -955,6 +1066,8 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     private func reset(preservePresence: Bool = false) {
         healthProbeWorkItem?.cancel()
         healthProbeWorkItem = nil
+        recoveryRetryWorkItem?.cancel()
+        recoveryRetryWorkItem = nil
         phoneLivenessWorkItem?.cancel()
         phoneLivenessWorkItem = nil
         if preservePresence { schedulePresenceDrop() }
@@ -962,6 +1075,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
             presenceDropWorkItem?.cancel()
             presenceDropWorkItem = nil
             server.setPresent(false)
+            server.setPhonePresent(false)
         }
         outputChar = nil
         phone = nil
@@ -986,6 +1100,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
             guard let self, !self.isSubscribed else { return }
             self.presenceDropWorkItem = nil
             self.server.setPresent(false)
+            self.server.setPhonePresent(false)
             log("iPhone reconnect grace expired — AgentMicro removed")
         }
         presenceDropWorkItem = work
@@ -1034,6 +1149,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         phoneConnected = true
         bluetoothState = .linked
         server.setPresent(true)
+        server.setPhonePresent(true)
         beginEndToEndHandshake()
         onSubscribed()
         publishStatus()
@@ -1043,17 +1159,27 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         guard characteristic.uuid == bridgeInputUUID, error == nil,
               let value = characteristic.value, !value.isEmpty else { return }
         notePhoneActivity()
-        if value.first == 2 { observeDeviceResponse(value) }
+        if value.first == 2 {
+            // Filter first: our own probe reply must not land in the buffer
+            // that assembles ChatGPT's health responses.
+            if consumeLivenessProbeFragment(value) { return }
+            observeDeviceResponse(value)
+        }
         if value.first == 5 {
-            if server.t3ClientCount() > 0 {
+            let t3ClientAttached = server.t3ClientCount() > 0
+            // Lifecycle frames (page selection, refresh, and connection
+            // recovery) always terminate in the menu companion. Previously,
+            // the presence of a T3 socket client diverted every channel-5 frame
+            // away from this parser, so switching pages could strand the iPhone
+            // with stale yellow health even while the menu bar was green.
+            handleBridgeControl(value, t3ClientAttached: t3ClientAttached)
+            if t3ClientAttached {
+                // Preserve T3's ownership of its configurable workspace actions.
+                // dispatchBridgeControl suppresses the local duplicate after it
+                // has mirrored lifecycle state and foreground activation.
                 var report = Data([hidReportID])
                 report.append(value)
                 server.broadcastT3Input(report)
-            } else {
-                // The native menu companion remains a complete fallback when
-                // T3 Code is closed; once T3 attaches, its configurable
-                // controls own this surface and execute each command once.
-                handleBridgeControl(value)
             }
             return
         }
@@ -1072,6 +1198,9 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
 
     private func notePhoneActivity() {
         lastPhoneActivityAt = Date()
+        // Any inbound frame answers an outstanding probe, whatever it was.
+        livenessProbeWorkItem?.cancel()
+        livenessProbeWorkItem = nil
         schedulePhoneLivenessCheck()
     }
 
@@ -1086,30 +1215,87 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
                 self.schedulePhoneLivenessCheck()
                 return
             }
-
-            log("iPhone heartbeat expired — treating the mobile app as disconnected")
-            self.isSubscribed = false
-            self.phoneConnected = false
-            self.outputChar = nil
-            self.pendingWrites.removeAll()
-            self.server.setPresent(false)
-            self.bluetoothState = .connecting
-            self.setEndToEndState(
-                .recovering,
-                detail: "iPhone app stopped responding; waiting for it to reopen",
-                force: true
-            )
-            if let phone = self.phone {
-                self.central.cancelPeripheralConnection(phone)
-            } else {
-                self.reset()
-            }
+            self.probePhoneLiveness()
         }
         phoneLivenessWorkItem = work
         DispatchQueue.main.asyncAfter(
             deadline: .now() + phoneLivenessTimeout,
             execute: work
         )
+    }
+
+    /// Asks the app directly whether it is still there, instead of inferring it
+    /// from traffic the app only produces while it is frontmost. iOS delivers
+    /// GATT writes to a backgrounded app and it answers `sys.version` from its
+    /// normal RPC handler, so this distinguishes "quiet" from "gone" — which is
+    /// the distinction the silence timer alone could never make.
+    private func probePhoneLiveness() {
+        guard livenessProbeWorkItem == nil else { return }
+        livenessProbeSequence += 1
+        // Short id on purpose: the reply must fit one 61-byte fragment so it can
+        // be filtered out whole (see consumeLivenessProbeFragment).
+        let probeID = "aml\(livenessProbeSequence)"
+        pendingLivenessProbeID = probeID
+        suppressingLivenessResponse = false
+        sendHostRPC(["id": probeID, "method": "sys.version"])
+
+        let deadline = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.livenessProbeWorkItem = nil
+            guard self.shouldRun, self.isSubscribed else { return }
+            // notePhoneActivity cancels this work item, so reaching it means
+            // nothing at all arrived while the probe was outstanding.
+            self.dropUnresponsivePhone()
+        }
+        livenessProbeWorkItem = deadline
+        DispatchQueue.main.asyncAfter(deadline: .now() + livenessProbeTimeout, execute: deadline)
+    }
+
+    private func dropUnresponsivePhone() {
+        log("iPhone did not answer a liveness probe — treating the mobile app as disconnected")
+        isSubscribed = false
+        phoneConnected = false
+        outputChar = nil
+        pendingWrites.removeAll()
+        server.setPresent(false)
+        server.setPhonePresent(false)
+        bluetoothState = .connecting
+        setEndToEndState(
+            .recovering,
+            detail: "iPhone app stopped responding; waiting for it to reopen",
+            force: true
+        )
+        if let phone = phone {
+            central.cancelPeripheralConnection(phone)
+        } else {
+            reset()
+        }
+    }
+
+    /// Keeps a liveness probe's reply out of the stream ChatGPT reads: it never
+    /// issued that request id, so the response is noise to its RPC client. The
+    /// reply is one fragment (a `sys.version` result is ~54 bytes, newline
+    /// included), so filtering the fragment filters the whole response.
+    private func consumeLivenessProbeFragment(_ value: Data) -> Bool {
+        guard let probeID = pendingLivenessProbeID else {
+            suppressingLivenessResponse = false
+            return false
+        }
+        guard value.count >= 2 else { return suppressingLivenessResponse }
+        let len = min(Int(value[1]), value.count - 2)
+        let fragment = value.subdata(in: 2..<(2 + len))
+        let text = String(data: fragment, encoding: .utf8) ?? ""
+        if text.hasPrefix("{\"id\"") || text.hasPrefix("{\"i\"") || text.hasPrefix("{\"result\"") {
+            // A new response begins here; it is ours only if it carries our id.
+            suppressingLivenessResponse = text.contains("\"\(probeID)\"")
+        }
+        // Newline-framed: the fragment carrying the terminator ends the reply.
+        if suppressingLivenessResponse, fragment.contains(0x0A) {
+            let consumed = true
+            suppressingLivenessResponse = false
+            return consumed
+        }
+        return suppressingLivenessResponse
     }
 
     /// Accumulate device->host channel-2 fragments (newline-terminated JSON) and
@@ -1235,6 +1421,16 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         // send a real RPC, and receive the phone's response before we turn the
         // iPhone status green.
         requestHostResync()
+        armHandshakeTimeout()
+    }
+
+    /// Gives an in-flight handshake twelve seconds to complete, then falls
+    /// back to `.recovering` (which re-drives the handshake on a slow loop).
+    /// Armed by both a fresh handshake and a host request observed while the
+    /// link is still yellow — the latter previously left the state stuck at
+    /// "awaiting iPhone reply" with no timer at all when the reply never came.
+    private func armHandshakeTimeout() {
+        guard healthCheckTimeoutWorkItem == nil else { return }
         let timeout = DispatchWorkItem { [weak self] in
             guard let self,
                   self.isSubscribed,
@@ -1243,7 +1439,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
             self.healthCheckTimeoutWorkItem = nil
             self.setEndToEndState(
                 .recovering,
-                detail: "ChatGPT did not complete the check; quit and reopen ChatGPT"
+                detail: "ChatGPT did not complete the check; retrying automatically"
             )
         }
         healthCheckTimeoutWorkItem = timeout
@@ -1260,6 +1456,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         pendingHealthRequestIDs[id] = Date()
         if endToEndState != .operational {
             setEndToEndState(.handshaking, detail: "ChatGPT request received; awaiting iPhone reply")
+            armHandshakeTimeout()
         }
     }
 
@@ -1329,6 +1526,8 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         endToEndState = state
         endToEndDetail = detail
         if state == .operational {
+            recoveryRetryWorkItem?.cancel()
+            recoveryRetryWorkItem = nil
             lastSuccessfulRoundTrip = Date()
             scheduleHealthProbe()
             // Every matching request/response is fresh liveness evidence even
@@ -1339,20 +1538,56 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         } else {
             healthProbeWorkItem?.cancel()
             healthProbeWorkItem = nil
+            if state == .recovering {
+                scheduleRecoveryRetry()
+            } else {
+                recoveryRetryWorkItem?.cancel()
+                recoveryRetryWorkItem = nil
+            }
         }
         guard changed else { return }
         if state != .operational {
             publishStatus()
         }
+        sendConnectionHealthSnapshot()
+        log("connection health: \(state.rawValue) — \(detail)")
+    }
+
+    /// `.recovering` used to promise "retrying automatically" without any
+    /// timer behind it: only the iPhone's manual Reconnect re-ran the
+    /// handshake, so one wedged or timed-out ChatGPT check pinned the menu
+    /// bar yellow until the user intervened. While the transport is intact
+    /// (iPhone subscribed, ChatGPT shim linked), re-run the real handshake on
+    /// a slow loop — it heals itself the moment ChatGPT answers again, and
+    /// stays silent while paused or while either side is genuinely gone.
+    private func scheduleRecoveryRetry() {
+        recoveryRetryWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.recoveryRetryWorkItem = nil
+            guard self.shouldRun,
+                  self.isSubscribed,
+                  self.shimConnected,
+                  self.endToEndState == .recovering else { return }
+            self.beginEndToEndHandshake()
+        }
+        recoveryRetryWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + recoveryRetryInterval, execute: work)
+    }
+
+    /// Health is a durable snapshot, not a one-shot transition. The iPhone
+    /// explicitly asks for it on foreground/page refresh so one dropped BLE
+    /// notification cannot leave controls disabled while the Mac is healthy.
+    private func sendConnectionHealthSnapshot() {
+        guard isSubscribed, phone != nil, outputChar != nil else { return }
         let object: [String: Any] = [
             "type": "connection-health",
             "version": 1,
-            "state": state.rawValue,
-            "detail": detail,
+            "state": endToEndState.rawValue,
+            "detail": endToEndDetail,
         ]
         guard let json = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) else { return }
         sendConfigJSON(json)
-        log("connection health: \(state.rawValue) — \(detail)")
     }
 
     /// A connected socket and subscribed BLE characteristic can both remain
@@ -1402,7 +1637,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
 
     /// Channel 5 is private to the phone/helper pair. It is never forwarded
     /// to the ChatGPT HID shim.
-    private func handleBridgeControl(_ body: Data) {
+    private func handleBridgeControl(_ body: Data, t3ClientAttached: Bool = false) {
         guard body.count >= 2 else { return }
         let len = min(Int(body[1]), 61)
         guard body.count >= 2 + len else { return }
@@ -1428,7 +1663,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
                 if !line.isEmpty { log("discarded malformed bridge-control frame") }
                 continue
             }
-            dispatchBridgeControl(object)
+            dispatchBridgeControl(object, t3ClientAttached: t3ClientAttached)
         }
 
         if bridgeControlBuffer.count > 64 * 1024 {
@@ -1448,10 +1683,13 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
             return
         }
         bridgeControlBuffer.removeAll()
-        dispatchBridgeControl(object)
+        dispatchBridgeControl(object, t3ClientAttached: t3ClientAttached)
     }
 
-    private func dispatchBridgeControl(_ object: [String: Any]) {
+    private func dispatchBridgeControl(
+        _ object: [String: Any],
+        t3ClientAttached: Bool = false
+    ) {
         if let commandID = object["commandID"] as? String, !commandID.isEmpty {
             let now = Date.timeIntervalSinceReferenceDate
             recentBridgeCommandIDs = recentBridgeCommandIDs.filter { now - $0.value < bridgeCommandIDTTL }
@@ -1466,18 +1704,37 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
             recentBridgeCommandIDs[commandID] = now
         }
 
-        switch object["cmd"] as? String {
+        let command = object["cmd"] as? String
+        let surface = object["surface"] as? String ?? "vscode"
+        let externalT3OwnsWorkspace = t3ClientAttached && surface == "t3code"
+
+        switch command {
         case "refreshState":
             if let target = object["target"] as? String,
-               target == "chatgpt" || target == "vscode" {
+               target == "chatgpt"
+                    || target == "vscode"
+                    || target == "t3code"
+                    || target == "claude-desktop" {
                 onControlTargetChange?(target)
             }
             if let onRefreshRequest { onRefreshRequest() }
             else { sendCachedState() }
+            sendConnectionHealthSnapshot()
+        case "recoverConnection":
+            if isSubscribed,
+               shimConnected,
+               endToEndState == .recovering
+                    || endToEndState == .transportConnected
+                    || endToEndState == .waitingForChatGPT {
+                beginEndToEndHandshake()
+            } else {
+                sendConnectionHealthSnapshot()
+            }
         case "setPins":
             if let pins = object["pins"] as? [Any] { onSetPins?(pins) }
         case "setControlTarget":
             if let target = object["target"] as? String { onControlTargetChange?(target) }
+            sendConnectionHealthSnapshot()
         case "vscodeKey":
             // Workspace-page key/dial events arrive on this private channel
             // instead of the shared channel-2 HID stream, so the ChatGPT/Codex
@@ -1487,18 +1744,39 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
             // versa. Replay them as the same v.oai.hid events the controllers
             // already handle.
             guard let key = object["k"] as? String else { break }
-            let surface = object["surface"] as? String ?? "vscode"
+            if surface == "t3code",
+               key == "ACT07",
+               (object["act"] as? Int ?? 1) == 1 {
+                // The attached T3 client still creates the chat exactly once;
+                // this companion only mirrors the foreground side effect.
+                T3DesktopCommand.bringToFrontAfterDesktopAction()
+            }
+            guard !externalT3OwnsWorkspace else { break }
             var params: [String: Any] = ["k": key, "act": object["act"] as? Int ?? 1]
             if let agent = object["ag"] as? Int { params["ag"] = agent }
             onVSCodeKey?("v.oai.hid", params, surface)
         case "vscodeNew", "vscodeTogglePin", "vscodeInsert", "vscodeVoice",
              "vscodeRaise", "vscodeClearComposer":
+            if externalT3OwnsWorkspace {
+                if command == "vscodeNew" {
+                    T3DesktopCommand.bringToFrontAfterDesktopAction()
+                }
+                if command == "vscodeRaise" {
+                    // The attached T3 client owns thread selection but ignores
+                    // raise requests. The companion still activates the desktop
+                    // app and deep-links the tapped thread, so a double-tapped
+                    // agent key brings T3 Code to the front.
+                    T3DesktopCommand.focus(targetID: object["target"] as? String)
+                }
+                break
+            }
             onVSCodeControl?(object)
         case "openURL":
             // Open (and focus) a URL on this Mac — used by the T3 page's NEW key
             // to launch a fresh chat in the T3 desktop app via its registered
             // `t3code://` handler. Scheme-limited so a stray frame can't open
             // arbitrary files/apps.
+            guard !externalT3OwnsWorkspace else { break }
             guard let raw = object["url"] as? String,
                   let url = URL(string: raw),
                   let scheme = url.scheme?.lowercased(),
@@ -1584,6 +1862,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         let bridge = Bridge(server: server)
         var keyEvents: [(String, String)] = []
         var controlEvents: [(String, String)] = []
+        var selectedTargets: [String] = []
         bridge.onVSCodeKey = { _, params, surface in
             keyEvents.append(((params["k"] as? String) ?? "", surface))
         }
@@ -1591,7 +1870,8 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
             controlEvents.append(((object["cmd"] as? String) ?? "",
                                   (object["surface"] as? String) ?? "vscode"))
         }
-        func feedFrame(_ object: [String: Any]) {
+        bridge.onControlTargetChange = { selectedTargets.append($0) }
+        func feedFrame(_ object: [String: Any], t3ClientAttached: Bool = false) {
             guard var data = try? JSONSerialization.data(withJSONObject: object) else { return }
             data.append(0x0A)
             var offset = 0
@@ -1599,7 +1879,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
                 let count = min(61, data.count - offset)
                 var report = Data([5, UInt8(count)])
                 report.append(data.subdata(in: offset..<(offset + count)))
-                bridge.handleBridgeControl(report)
+                bridge.handleBridgeControl(report, t3ClientAttached: t3ClientAttached)
                 offset += count
             }
         }
@@ -1613,9 +1893,20 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         feedFrame(["cmd": "vscodeRaise", "surface": "vscode"])
         feedFrame(["cmd": "vscodeVoice", "surface": "claude-desktop"])
         feedFrame(["cmd": "vscodeClearComposer", "surface": "claude-desktop"])
+        let keyCountBeforeExternalT3 = keyEvents.count
+        feedFrame(
+            ["cmd": "vscodeKey", "surface": "t3code", "k": "AG02", "act": 1],
+            t3ClientAttached: true
+        )
+        feedFrame(
+            ["cmd": "setControlTarget", "surface": "t3code", "target": "chatgpt"],
+            t3ClientAttached: true
+        )
         guard keyEvents.contains(where: { $0 == ("AG01", "t3code") }),
               keyEvents.contains(where: { $0 == ("AG00", "vscode") }),
-              keyEvents.contains(where: { $0 == ("JOY_RIGHT", "claude-desktop") }) else {
+              keyEvents.contains(where: { $0 == ("JOY_RIGHT", "claude-desktop") }),
+              keyEvents.count == keyCountBeforeExternalT3,
+              selectedTargets.last == "chatgpt" else {
             return false
         }
         return controlEvents.contains(where: { $0 == ("vscodeTogglePin", "t3code") })
@@ -1735,14 +2026,23 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
 
     private func sendConfigJSON(_ json: Data) {
         guard phone != nil, outputChar != nil else { return }
+        // Newline framing lets the iPhone discard one incomplete config frame
+        // and parse the next one independently. With bare concatenated JSON, a
+        // single dropped BLE notification poisoned the buffer until the mobile
+        // app was relaunched.
+        var framedJSON = json
+        framedJSON.append(0x0A)
         var offset = 0
-        while offset < json.count {
-            let chunk = min(61, json.count - offset)
+        while offset < framedJSON.count {
+            let chunk = min(61, framedJSON.count - offset)
             var report = Data(count: 64)
             report[0] = hidReportID
             report[1] = 3 // config channel (1 = device debug log, 2 = RPC)
             report[2] = UInt8(chunk)
-            report.replaceSubrange(3..<(3 + chunk), with: json.subdata(in: offset..<(offset + chunk)))
+            report.replaceSubrange(
+                3..<(3 + chunk),
+                with: framedJSON.subdata(in: offset..<(offset + chunk))
+            )
             pendingWrites.append(report)
             offset += chunk
         }
@@ -3881,6 +4181,11 @@ final class T3Controller {
     /// (targets, pins, selected, connected, slots, issue, native voice)
     var onPublish: ([[String: Any]], [String?], String?, Bool, [[String: Any]], String?, Bool) -> Void
         = { _, _, _, _, _, _, _ in }
+    /// False while the packaged T3 app owns the t3code surface. This fallback
+    /// controller keeps polling its own backend once started, so without the
+    /// check its snapshots would race the packaged app's frames and repaint the
+    /// board from stale state.
+    var shouldPublish: () -> Bool = { true }
 
     init(backend: T3Backend = T3Backend()) {
         self.backend = backend
@@ -3926,16 +4231,21 @@ final class T3Controller {
     }
 
     private func publish() {
+        guard shouldPublish() else { return }
         let snapshot = snapshotNow()
-        let targets = snapshot?.targets ?? []
-        let selected = snapshot?.pins.selectedTargetID
-        let pins = normalizedPins(snapshot?.pins.slots ?? [])
-        let connected = (snapshot?.phase == .connected)
+        // Before the backend's first snapshot there is nothing to say, and
+        // saying it anyway would blank the board: empty targets, no pins, every
+        // key off — which the phone renders as "Mac linked" with dark keys.
+        guard let snapshot else { return }
+        let targets = snapshot.targets
+        let selected = snapshot.pins.selectedTargetID
+        let pins = normalizedPins(snapshot.pins.slots)
+        let connected = (snapshot.phase == .connected)
         lock.lock()
         let nativeVoiceActive = nativeVoiceActive
         let dictationIssue = dictationIssue
         lock.unlock()
-        let issue = dictationIssue ?? snapshot?.issue?.message
+        let issue = dictationIssue ?? snapshot.issue?.message
         let targetDicts: [[String: Any]] = targets.map { target in
             [
                 "id": target.id,
@@ -4453,7 +4763,9 @@ if target == .auto, !emulate {
             controller.refreshState()
             lights.emit()
         case "t3code":
-            t3Controller.activate() // lazily start + republish the isolated T3 surface
+            if server.t3ClientCount() == 0 {
+                t3Controller.activate() // fallback only when the packaged T3 bridge is absent
+            }
         case "claude-desktop":
             claudeDesktopController.refreshState()
         default: // chatgpt
@@ -4467,6 +4779,11 @@ if target == .auto, !emulate {
             bridge?.sendVSCodeState(targets: targets, pins: pins, selected: selected, connected: connected)
         }
     }
+    // The packaged T3 app, when attached, is the sole author of the t3code
+    // board. The two call sites below already avoid *starting* this fallback in
+    // that case, but once started its backend keeps polling, so the guard has to
+    // live on every publish, not just on activation.
+    t3Controller.shouldPublish = { server.t3ClientCount() == 0 }
     t3Controller.onPublish = {
         [weak bridge] targets, pins, selected, connected, slots, issue, nativeVoiceActive in
         DispatchQueue.main.async {
@@ -4509,7 +4826,9 @@ if target == .auto, !emulate {
         case "vscode":
             controller.refreshState(); lights.emit()
         case "t3code":
-            t3Controller.refreshState()
+            if server.t3ClientCount() == 0 {
+                t3Controller.refreshState()
+            }
         case "claude-desktop":
             claudeDesktopController.refreshState()
         default:
@@ -4590,6 +4909,7 @@ if target == .auto, !emulate {
         let device = EmuDevice(server: server)
         server.onOutput = device.handleOutput
         server.setPresent(true)
+        server.setPhonePresent(true)
         log("emulated Codex Micro (VID 0x303A, PID 0x8360) is live — no iPhone needed")
         startStdinLoop(device)
     } else {

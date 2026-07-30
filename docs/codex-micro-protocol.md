@@ -169,9 +169,11 @@ Lighting brightness is configurable from 0–100 in the ChatGPT/Codex Micro sett
 100, and is sent normalized to 0–1. The iPhone remote displays the reported value read-only and
 uses it for both the agent-key LEDs and body glow; it has no independent brightness controls.
 Auto-off choices in the current settings schema are never, 30 seconds, 1, 3, 10, or 30 minutes,
-or 1 hour; **[OFFICIAL]** the default is 3 minutes. Lights wake on keyboard use or an Agent Key
-status change. Battery level appears in Codex Micro settings and the sidebar tooltip when the
-device reports it.
+or 1 hour; **[OFFICIAL]** the default is 3 minutes. That power-saving timer applies to physical
+hardware. While the iPhone control surface is visible, it keeps the semantic key colours lit at
+the configured brightness so status remains glanceable; backgrounding still suspends the display
+and its lighting heartbeat normally. Battery level appears in Codex Micro settings and the
+sidebar tooltip when the device reports it.
 
 Current host lighting writes are de-duplicated and wait for a 100 ms input-quiet window. A
 selected working chat uses a snake ambient animation in its status color. Special voice and

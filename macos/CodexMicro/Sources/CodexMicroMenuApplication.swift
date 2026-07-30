@@ -22,6 +22,8 @@ enum CodexMicroMenuApplication {
 final class CodexMicroAppDelegate: NSObject, NSApplicationDelegate {
     private var model: AppModel?
     private var menuBarController: MenuBarController?
+    private var quitRequested = false
+    private var didShutDown = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard isRunningFromStableInstallLocation else {
@@ -40,15 +42,17 @@ final class CodexMicroAppDelegate: NSObject, NSApplicationDelegate {
         let migration = LegacyMigrationManager.disableInvisibleHelperIfNeeded()
         let model = AppModel(legacyMigration: migration)
         self.model = model
-        menuBarController = MenuBarController(model: model)
+        menuBarController = MenuBarController(
+            model: model,
+            onQuit: { [weak self] in self?.requestQuit() }
+        )
 
         model.start()
         menuBarController?.showOnboardingIfNeeded()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        model?.shutdown()
-        AppLogStore.shared.flush()
+        shutdownIfNeeded()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -58,6 +62,10 @@ final class CodexMicroAppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard model?.isBusy == true else { return .terminateNow }
 
+        // A critical patch/restore may have started between the popover click
+        // and this next-run-loop termination request. Keep the safety gate and
+        // allow a fresh Quit request after the operation finishes.
+        quitRequested = false
         sender.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.alertStyle = .warning
@@ -67,6 +75,19 @@ final class CodexMicroAppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Keep AgentMicro Open")
         alert.runModal()
         return .terminateCancel
+    }
+
+    private func requestQuit() {
+        guard !quitRequested else { return }
+        quitRequested = true
+        NSApp.terminate(nil)
+    }
+
+    private func shutdownIfNeeded() {
+        guard !didShutDown else { return }
+        didShutDown = true
+        model?.shutdown()
+        AppLogStore.shared.flush()
     }
 
     private func enforceSingleInstance() -> Bool {

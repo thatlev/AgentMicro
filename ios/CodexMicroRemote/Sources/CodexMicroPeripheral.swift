@@ -90,6 +90,14 @@ struct WorkspaceActionKey: Equatable {
     var accent: UInt32
 }
 
+/// One selectable project for the T3 Code NEW-chat picker. The id is opaque
+/// to the app: T3 Code advertises it in the workspace-state `projects` list
+/// and the board echoes it back verbatim in the `vscodeNew` command.
+struct WorkspaceProject: Equatable {
+    var id: String
+    var title: String
+}
+
 /// One completely isolated non-Codex control surface. The bridge uses the
 /// surface key (`vscode`, `t3code`, or `claude-desktop`) on every request and
 /// response, so a delayed transcription can never land on whichever page the
@@ -105,6 +113,9 @@ struct WorkspaceBridgeState: Equatable {
     var nativeVoiceActive = false
     var slots = Array(repeating: SlotLight(), count: 6)
     var actionKeys: [WorkspaceActionKey] = []
+    /// Projects T3 Code offers for a new chat. Empty on older T3 builds,
+    /// where NEW keeps its original single-tap behavior.
+    var projects: [WorkspaceProject] = []
     var issue: String?
 }
 
@@ -215,7 +226,17 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
     private var autoDimTimer: Timer?
 
     var effectiveLightingBrightness: Double {
-        isLightingDimmed ? 0 : (lightingBrightness ?? 1)
+        let hostBrightness = lightingBrightness ?? 1
+
+        // ChatGPT's auto-off setting is a power-saving instruction for the
+        // physical keyboard. Applying it literally to the on-screen remote
+        // made a healthy board turn colourless after three minutes: the key
+        // glyphs still showed thinking/idle/unassigned, but every LED was
+        // multiplied by zero. While the user is actively looking at this
+        // control surface, keep the semantic colours visible at the exact
+        // host-selected brightness. The dimmed state is retained only across
+        // background/suspension and is reset on the next foreground entry.
+        return isForegroundActive || !isLightingDimmed ? hostBrightness : 0
     }
 
     var canControlChatGPT: Bool {
@@ -273,7 +294,15 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
     private var lastOutputReport = Data(count: 63)
     private var isSuspended = false
     private var foregroundHeartbeat: Timer?
-    private let foregroundHeartbeatInterval: TimeInterval = 8
+    /// Must stay comfortably inside the Mac's 26s liveness window. At the old
+    /// 8s (plus 2s of timer tolerance) three consecutive fires could span 30s
+    /// and trip a false "iPhone heartbeat expired" — the companion then dropped
+    /// and re-subscribed seconds later, over and over. 5s leaves room for four
+    /// missed fires before the Mac can legitimately call the phone gone.
+    private let foregroundHeartbeatInterval: TimeInterval = 5
+    private var connectionRecoveryTimer: Timer?
+    private let connectionRecoveryInterval: TimeInterval = 3
+    private var isForegroundActive = false
     /// The page the user intends to control. This survives transport loss so a
     /// fresh Mac subscription cannot silently fall back to the wrong backend.
     private var desiredControlTarget = "chatgpt"
@@ -339,6 +368,7 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
         macConnectionState = state
         macConnectionDetail = detail
         log("connection state: \(state.rawValue) — \(detail)")
+        updateConnectionRecoveryWatchdog()
     }
 
     // MARK: GATT
@@ -559,6 +589,10 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
             ? chatgptSlots
             : workspaceState(for: target).slots
         sendBridgeControl(["cmd": "setControlTarget", "target": target, "surface": target])
+        // Page changes are also connection-state refresh boundaries. This keeps
+        // the visible status and buttons synchronized without waiting for the
+        // next eight-second foreground heartbeat.
+        requestLatestHostState()
     }
 
     /// A VS Code-page key event, carried on the private bridge channel (5)
@@ -581,6 +615,19 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
         sendBridgeControl([
             "cmd": "vscodeNew", "surface": surface,
             "kind": kind, "value": value, "label": label,
+        ])
+    }
+
+    /// Ask T3 Code to start a new chat inside the project the user picked on
+    /// the board. The project id comes from the workspace-state `projects`
+    /// list and is echoed back verbatim. T3 builds that predate project
+    /// routing ignore the extra fields and start a chat in the current
+    /// context, exactly like a plain NEW press.
+    func createT3ChatInProject(_ projectID: String, title: String) {
+        noteLightingActivity()
+        sendBridgeControl([
+            "cmd": "vscodeNew", "surface": "t3code",
+            "project": projectID, "projectTitle": title,
         ])
     }
 
@@ -675,18 +722,22 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
     /// semantic Agent Key state. This is side-effect-free in ChatGPT and does
     /// not fake a key press merely to wake lighting.
     func applicationDidBecomeActive() {
+        isForegroundActive = true
         foregroundRenderGeneration &+= 1
         refreshBattery()
         sendDeviceStatus()
         noteLightingActivity()
         requestLatestHostState()
         startForegroundHeartbeat()
+        updateConnectionRecoveryWatchdog()
     }
 
     /// The app left the foreground. Stop the heartbeat so it never runs in the
     /// background (where the BLE link is torn down anyway).
     func applicationWillResignActive() {
+        isForegroundActive = false
         stopForegroundHeartbeat()
+        stopConnectionRecoveryWatchdog()
         autoDimTimer?.invalidate()
         autoDimTimer = nil
     }
@@ -718,7 +769,9 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
                 self.requestLatestHostState()
             }
         }
-        timer.tolerance = 2 // batch wake-ups; this is a freshness poll, not a deadline
+        // Small tolerance only. This doubles as the Mac's liveness proof, so
+        // slack here is spent directly against that deadline.
+        timer.tolerance = 0.5
         RunLoop.main.add(timer, forMode: .common)
         foregroundHeartbeat = timer
     }
@@ -726,6 +779,52 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
     private func stopForegroundHeartbeat() {
         foregroundHeartbeat?.invalidate()
         foregroundHeartbeat = nil
+    }
+
+    /// A stale yellow state must heal without terminating the app. While the
+    /// foreground phone still has a Mac subscription, ask the companion for a
+    /// durable health snapshot every few seconds. If the Mac is genuinely
+    /// recovering, the same idempotent command restarts its handshake only
+    /// after the previous attempt has timed out.
+    private func updateConnectionRecoveryWatchdog() {
+        stopConnectionRecoveryWatchdog()
+        guard isForegroundActive,
+              hostConnected,
+              !macConnectionState.isOperational,
+              managerState == .poweredOn else { return }
+
+        requestConnectionRecovery()
+        let timer = Timer(
+            timeInterval: connectionRecoveryInterval,
+            repeats: true
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self,
+                      self.isForegroundActive,
+                      self.hostConnected,
+                      !self.macConnectionState.isOperational else {
+                    self?.stopConnectionRecoveryWatchdog()
+                    return
+                }
+                self.requestConnectionRecovery()
+            }
+        }
+        timer.tolerance = 0.5
+        RunLoop.main.add(timer, forMode: .common)
+        connectionRecoveryTimer = timer
+    }
+
+    private func stopConnectionRecoveryWatchdog() {
+        connectionRecoveryTimer?.invalidate()
+        connectionRecoveryTimer = nil
+    }
+
+    private func requestConnectionRecovery() {
+        sendBridgeControl([
+            "cmd": "recoverConnection",
+            "target": desiredControlTarget,
+            "surface": desiredControlTarget,
+        ])
     }
 
     /// Send a CodexMicro-only control message to the Mac shim on channel 4 (not
@@ -938,7 +1037,7 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
     }
 
     /// Channel-3 settings reports from the Mac bridge (not part of the real
-    /// device protocol): chunked bare JSON carrying layout and brightness.
+    /// device protocol): newline-framed, chunked JSON carrying layout and brightness.
     private func handleConfigReport(_ body: Data, centralID: UUID) {
         let lengthIndex = body.index(after: body.startIndex)
         let len = Int(body[lengthIndex])
@@ -948,21 +1047,46 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
         }
         let fragment = body.subdata(in: 2..<(2 + len))
         var configBuffer = configBuffers[centralID] ?? Data()
-        if !configBuffer.isEmpty,
-           String(data: fragment, encoding: .utf8)?.hasPrefix("{\"type\"") == true {
-            configBuffer.removeAll() // resync after a dropped fragmented message
-        }
         configBuffer.append(fragment)
         guard configBuffer.count <= maxRPCBufferBytes else {
             log("discarded oversized config frame")
             configBuffers.removeValue(forKey: centralID)
             return
         }
-        guard let object = try? JSONSerialization.jsonObject(with: configBuffer) as? [String: Any] else {
-            configBuffers[centralID] = configBuffer
-            return // wait for more fragments
+
+        // Current companions newline-terminate every config object. If one BLE
+        // notification is dropped, discard only that malformed line; the next
+        // complete health/lighting frame can then repair the UI automatically.
+        while let newline = configBuffer.firstIndex(of: 0x0A) {
+            var line = Data(configBuffer[..<newline])
+            configBuffer.removeSubrange(...newline)
+            if line.last == 0x0D { line.removeLast() }
+            guard !line.isEmpty else { continue }
+            processConfigJSON(line)
         }
-        configBuffers.removeValue(forKey: centralID)
+
+        if configBuffer.isEmpty {
+            configBuffers.removeValue(forKey: centralID)
+            return
+        }
+
+        // Compatibility with an older installed Mac companion that sends one
+        // bare JSON object without a delimiter.
+        if (try? JSONSerialization.jsonObject(with: configBuffer) as? [String: Any]) != nil {
+            let complete = configBuffer
+            configBuffer.removeAll()
+            processConfigJSON(complete)
+            configBuffers.removeValue(forKey: centralID)
+        } else {
+            configBuffers[centralID] = configBuffer
+        }
+    }
+
+    private func processConfigJSON(_ data: Data) {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            log("discarded malformed config frame")
+            return
+        }
         switch object["type"] as? String {
         case "codex-micro-layout":
             applyLayout(object)
@@ -1030,6 +1154,14 @@ final class CodexMicroPeripheral: NSObject, ObservableObject {
                     active: entry["active"] as? Bool ?? false,
                     nativeVoice: entry["nativeVoice"] as? Bool ?? false
                 )
+            }
+        }
+
+        if let values = object["projects"] as? [[String: Any]] {
+            state.projects = values.compactMap { entry in
+                guard let id = entry["id"] as? String, !id.isEmpty else { return nil }
+                let title = entry["title"] as? String
+                return WorkspaceProject(id: id, title: title?.isEmpty == false ? title! : id)
             }
         }
 

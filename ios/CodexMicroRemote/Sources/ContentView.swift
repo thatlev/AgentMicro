@@ -718,6 +718,13 @@ private struct HardwareConsole: View {
     /// per deflection. It must return to centre before another action can fire,
     /// so a slightly wandering thumb cannot toggle several desktop panes.
     @State private var activeClaudeJoystickDirection: Int?
+    /// T3 Code NEW-chat project picker. While it is open the joystick no longer
+    /// emits its synced desktop actions: each down/up deflection steps the
+    /// highlight by exactly one project (the stick must return to centre before
+    /// the next step registers), SEND starts the chat in the highlighted
+    /// project, and pressing NEW again cancels.
+    @State private var projectPickerOpen = false
+    @State private var projectPickerIndex = 0
     private let workspaceDoubleTapWindow: TimeInterval = 0.45
 
     var body: some View {
@@ -752,6 +759,15 @@ private struct HardwareConsole: View {
                                 // Low → Medium → High → Extra high → Max.
                                 routeKey(clockwise ? "ENC_CC" : "ENC_CW", action: 2)
                             },
+                            onScrollStep: { clockwise in
+                                // Fine stream: six per detent, no perimeter
+                                // pulse (that marks a discrete change). T3 Code
+                                // consumes it only when its knob setting is
+                                // "Scroll the chat"; every other surface
+                                // ignores the unknown key.
+                                guard page == .t3Code else { return }
+                                routeKey(clockwise ? "ENC_SCROLL_CC" : "ENC_SCROLL_CW", action: 2)
+                            },
                             onPress: { pressing in
                                 if pressing { pulseDialPerimeter() }
                                 routeKey("ENC", action: pressing ? 1 : 0)
@@ -769,6 +785,8 @@ private struct HardwareConsole: View {
                         JoystickControl { angle, distance in
                             if page == .codex {
                                 peripheral.sendJoystick(angle: angle, distance: distance)
+                            } else if projectPickerOpen {
+                                routeProjectPickerJoystick(angle: angle, distance: distance)
                             } else {
                                 routeWorkspaceJoystick(angle: angle, distance: distance)
                             }
@@ -862,6 +880,14 @@ private struct HardwareConsole: View {
                     }
                 }
                 .frame(width: gridSide, height: gridSide)
+
+                if projectPickerOpen, page == .t3Code {
+                    // Display-only: every control underneath (joystick, SEND,
+                    // NEW) must keep receiving touches while the picker is up.
+                    projectPickerOverlay()
+                        .frame(width: gridSide, height: gridSide)
+                        .allowsHitTesting(false)
+                }
             }
             .frame(width: side, height: side)
             .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
@@ -875,9 +901,15 @@ private struct HardwareConsole: View {
             optimisticCodexWorkingTask = nil
             optimisticCodexWorking = nil
             activeClaudeJoystickDirection = nil
+            closeProjectPicker()
             codexSelectionReconciliationTask?.cancel()
             codexSelectionReconciliationTask = nil
             pendingLocalCodexSelection = false
+        }
+        .onChange(of: workspaceState.projects) { _, projects in
+            // A disconnect or an older T3 build retracts the list; never leave
+            // the board trapped in a picker that can no longer be confirmed.
+            if projects.isEmpty { closeProjectPicker() }
         }
         .onChange(of: peripheral.slots) { _, slots in
             // Reconcile the optimistic selection with the host's authoritative
@@ -1149,16 +1181,39 @@ private struct HardwareConsole: View {
                 )
             }
             var light = workspaceState.slots[index]
-            // A tapped agent key is authoritative immediately. The bridge echoes
-            // the selected slot back as breathing white over BLE, but that
-            // round-trip can trail the tap — and until it lands a completed
-            // (green) agent keeps looking unread. Show the selection optimistically
-            // so it never waits for the next host status write (e.g. a new prompt).
-            if localCodexSelection == index {
-                light.color = 0xFFFFFF
-                light.brightness = 1
-                light.effect = 4
-                light.speed = 0.4
+            // Selection is read from the host's own target id, never inferred
+            // from a light effect. Effects encode *status* (a solid selected
+            // key is normal), so inferring selection from "which key breathes"
+            // silently fails and strands the highlight on a stale key.
+            //
+            // A tap is authoritative only until the host reports a selection of
+            // its own; from then on the host always wins, so changing chats
+            // with the mouse in T3 Code moves the highlight off the key you
+            // last tapped instead of leaving it behind.
+            let hostSelection = effectiveWorkspacePins.firstIndex(where: {
+                $0 != nil && $0 == effectiveSelectedTargetID
+            })
+            let selectedIndex = hostSelection ?? localCodexSelection
+            // Pulsing marks the chat you are in — and nothing else. The
+            // selected key always breathes, in whatever colour its status
+            // says (blue thinking, orange input, red error, white otherwise);
+            // every other key renders solid no matter what the host sent, so a
+            // moving light on the board is never ambiguous.
+            if selectedIndex == index {
+                // Selecting also acknowledges a completed/unread (green) task
+                // straight away rather than waiting for the host's next status
+                // write. Active semantic colours stay authoritative.
+                if light.color == 0x00FF4C {
+                    light.color = 0xFFFFFF
+                }
+                if light.isOn {
+                    light.brightness = 1
+                    light.effect = 4
+                    light.speed = 0.4
+                }
+            } else if light.isOn, light.effect == 4 || light.effect == 6 {
+                light.effect = 1
+                light.speed = 0
             }
             return light
         }
@@ -1217,16 +1272,17 @@ private struct HardwareConsole: View {
         }
     }
 
-    /// The slot the host currently reports as selected. On workspace surfaces
-    /// the bridge marks only the selected slot as breathing white; a breathing
-    /// colour there is a working/attention status, not a selection. On Codex,
-    /// ChatGPT drives selection directly, so any breathing slot is the open chat.
+    /// The slot the host currently reports as selected. Workspace surfaces
+    /// publish the selected *target id* alongside the pin map, so selection is
+    /// matched by identity — a light effect describes status, not selection,
+    /// and a selected key is frequently solid. On Codex, ChatGPT drives
+    /// selection directly, so any breathing slot is the open chat.
     private func hostSelectedSlot() -> Int? {
-        let isSelectionLight: (SlotLight) -> Bool = { $0.isOn && ($0.effect == 4 || $0.effect == 6) }
         if page.usesWorkspaceBridge {
-            return peripheral.slots.firstIndex { isSelectionLight($0) && $0.color == 0xFFFFFF }
+            guard let selectedID = effectiveSelectedTargetID else { return nil }
+            return effectiveWorkspacePins.firstIndex { $0 == selectedID }
         }
-        return peripheral.slots.firstIndex(where: isSelectionLight)
+        return peripheral.slots.firstIndex { $0.isOn && ($0.effect == 4 || $0.effect == 6) }
     }
 
     private func finishCodexSelectionReconciliation() {
@@ -1266,6 +1322,116 @@ private struct HardwareConsole: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
             routeKey(key, action: 0)
         }
+    }
+
+    /// Project-picker navigation. Same one-action-per-deflection discipline as
+    /// the desktop routing above: pushing down twice in a row without returning
+    /// to centre still moves only one project — the stick must re-centre (or be
+    /// released) before the next step registers. Nothing is sent to the host
+    /// while the picker is open.
+    private func routeProjectPickerJoystick(angle: Double, distance: Double) {
+        guard distance >= 0.28 else {
+            activeClaudeJoystickDirection = nil
+            return
+        }
+        guard distance >= 0.55, activeClaudeJoystickDirection == nil else { return }
+        let direction = Int((angle * 4).rounded()) % 4
+        activeClaudeJoystickDirection = direction
+        let count = workspaceState.projects.count
+        guard count > 0 else { return }
+        // 1 = down, 3 = up (same angle mapping as routeWorkspaceJoystick).
+        if direction == 1 {
+            projectPickerIndex = min(projectPickerIndex + 1, count - 1)
+        } else if direction == 3 {
+            projectPickerIndex = max(projectPickerIndex - 1, 0)
+        }
+    }
+
+    private func openProjectPicker() {
+        guard !workspaceState.projects.isEmpty else { return }
+        projectPickerIndex = 0
+        activeClaudeJoystickDirection = nil
+        withAnimation(.easeOut(duration: 0.15)) {
+            projectPickerOpen = true
+        }
+    }
+
+    private func closeProjectPicker() {
+        guard projectPickerOpen else { return }
+        withAnimation(.easeOut(duration: 0.15)) {
+            projectPickerOpen = false
+        }
+        activeClaudeJoystickDirection = nil
+    }
+
+    /// SEND while the picker is open: start the new chat in the highlighted
+    /// project instead of submitting the composer.
+    private func confirmProjectPickerSelection() {
+        let projects = workspaceState.projects
+        guard projects.indices.contains(projectPickerIndex) else {
+            closeProjectPicker()
+            return
+        }
+        let project = projects[projectPickerIndex]
+        peripheral.createT3ChatInProject(project.id, title: project.title)
+        closeProjectPicker()
+    }
+
+    /// The project list shown when NEW is pressed on T3 Code. Highlight tracks
+    /// `projectPickerIndex`; navigation is joystick-only, so the overlay never
+    /// intercepts touches (`.allowsHitTesting(false)` at the call site).
+    private func projectPickerOverlay() -> some View {
+        let projects = workspaceState.projects
+        let safeIndex = min(projectPickerIndex, max(0, projects.count - 1))
+        let accent = Color(packedRGB: 0x39D98A)
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("NEW CHAT IN PROJECT")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Color.white.opacity(0.85))
+            ScrollView {
+                VStack(spacing: 4) {
+                    ForEach(Array(projects.enumerated()), id: \.element.id) { index, project in
+                        let highlighted = index == safeIndex
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(highlighted ? accent : Color.white.opacity(0.25))
+                                .frame(width: 7, height: 7)
+                            Text(project.title)
+                                .font(.system(size: 13, weight: highlighted ? .semibold : .regular))
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(highlighted ? accent.opacity(0.28) : Color.white.opacity(0.06))
+                        )
+                        .overlay {
+                            if highlighted {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(accent, lineWidth: 1)
+                            }
+                        }
+                    }
+                }
+            }
+            Text("Joystick moves · SEND selects · NEW cancels")
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.55))
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.black.opacity(0.88))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color.white.opacity(0.16), lineWidth: 1)
+                }
+        )
+        .padding(10)
+        .transition(.opacity)
     }
 
     /// A 1U command key whose legend/icon follows the synced layout for `slotId`.
@@ -1350,7 +1516,20 @@ private struct HardwareConsole: View {
             side: side
         ) { pressing in
             if localOverride == .host {
-                sendKey(configured.key, pressing: pressing)
+                // NEW on T3 Code opens the project picker instead of firing
+                // straight away, but only once T3 Code has advertised its
+                // projects. Older builds get the original single-tap NEW.
+                if page == .t3Code, configured.action == "new", !workspaceState.projects.isEmpty {
+                    if pressing {
+                        if projectPickerOpen {
+                            closeProjectPicker()
+                        } else {
+                            openProjectPicker()
+                        }
+                    }
+                } else {
+                    sendKey(configured.key, pressing: pressing)
+                }
             } else if pressing {
                 performLocalOverride(localOverride)
             }
@@ -1388,6 +1567,12 @@ private struct HardwareConsole: View {
             accessibilityName: "Send to \(page.surfaceName)",
             hint: "Sends the current \(page.surfaceName) composer message"
         ) { pressing in
+            // While the T3 project picker is open, SEND confirms the
+            // highlighted project — it must never reach the composer.
+            if page == .t3Code, projectPickerOpen {
+                if pressing { confirmProjectPickerSelection() }
+                return
+            }
             if localOverride == .host {
                 sendKey("ACT12", pressing: pressing)
             } else if pressing {
@@ -2935,6 +3120,8 @@ private struct RotaryControl: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let onStep: (Bool) -> Void
+    /// Fine-grained companion to `onStep`, emitted six times per detent.
+    let onScrollStep: (Bool) -> Void
     let onPress: (Bool) -> Void
     let onLongPress: () -> Void
 
@@ -2942,9 +3129,11 @@ private struct RotaryControl: View {
     // Circular (rim) tracking.
     @State private var lastDragAngle: Double?
     @State private var pendingRotation = 0.0
+    @State private var pendingScrollRotation = 0.0
     // Linear (center) fine-scrub tracking.
     @State private var lastLocation: CGPoint?
     @State private var pendingLinear = 0.0
+    @State private var pendingScrollLinear = 0.0
     @State private var isRotating = false
     @State private var isTouching = false
     @State private var isPressed = false
@@ -3080,11 +3269,20 @@ private struct RotaryControl: View {
         }
     }
 
-    /// A deliberately coarse virtual encoder: 30° per emitted detent gives
-    /// twelve precise steps per revolution instead of twenty, requiring a
-    /// more intentional turn before changing the host selection.
-    private var stepDegrees: Double { 30 }
+    /// A deliberately coarse virtual encoder: 90° per emitted detent gives
+    /// four steps per revolution, so a quick flick is *one* discrete change
+    /// rather than a burst the host can only partly apply. Discrete actions
+    /// (reasoning effort) ride this stream.
+    private var stepDegrees: Double { 90 }
     private var stepAngle: Double { stepDegrees * .pi / 180 }
+
+    /// The fine stream, emitted from the same motion at 15° — six ticks per
+    /// discrete detent. Continuous actions (scrolling the transcript) ride
+    /// this one. Both streams are always sent; the host listens to whichever
+    /// its AgentMicro setting selects, so switching the dial's job needs no
+    /// setting on the phone.
+    private var scrollDegrees: Double { 15 }
+    private var scrollAngle: Double { scrollDegrees * .pi / 180 }
 
     /// Transient ±N detent count for the active gesture, floated just above the
     /// pointer so a turn can be counted and stopped on the right item.
@@ -3120,6 +3318,7 @@ private struct RotaryControl: View {
                     // quickly through many steps.
                     lastLocation = nil
                     pendingLinear = 0
+                    pendingScrollLinear = 0
                     let angle = atan2(dy, dx)
                     guard let previous = lastDragAngle else {
                         lastDragAngle = angle
@@ -3130,6 +3329,7 @@ private struct RotaryControl: View {
                     if delta < -.pi { delta += 2 * .pi }
                     lastDragAngle = angle
                     pendingRotation += delta
+                    pendingScrollRotation += delta
                     rotation += delta * 180 / .pi
                     while pendingRotation >= stepAngle {
                         pendingRotation -= stepAngle
@@ -3139,18 +3339,28 @@ private struct RotaryControl: View {
                         pendingRotation += stepAngle
                         emitStep(false)
                     }
+                    while pendingScrollRotation >= scrollAngle {
+                        pendingScrollRotation -= scrollAngle
+                        emitScrollStep(true)
+                    }
+                    while pendingScrollRotation <= -scrollAngle {
+                        pendingScrollRotation += scrollAngle
+                        emitScrollStep(false)
+                    }
                 } else {
                     // Fine mode: vertical scrub in the center disc. One detent per
                     // `linearThrow` points, up = increase — a predictable,
                     // controllable 1-at-a-time motion for exact selection.
                     lastDragAngle = nil
                     pendingRotation = 0
+                    pendingScrollRotation = 0
                     guard let last = lastLocation else {
                         lastLocation = location
                         return
                     }
-                    pendingLinear += Double(last.y - location.y)
-                    lastLocation = location
+                    let travel = Double(last.y - location.y)
+                    pendingLinear += travel
+                    pendingScrollLinear += travel
                     while pendingLinear >= Double(linearThrow) {
                         pendingLinear -= Double(linearThrow)
                         rotation += stepDegrees
@@ -3160,6 +3370,17 @@ private struct RotaryControl: View {
                         pendingLinear += Double(linearThrow)
                         rotation -= stepDegrees
                         emitStep(false)
+                    }
+                    // Same six-to-one ratio as the rim, so the centre scrub
+                    // scrolls at a comparable rate.
+                    let scrollThrow = Double(linearThrow) * scrollDegrees / stepDegrees
+                    while pendingScrollLinear >= scrollThrow {
+                        pendingScrollLinear -= scrollThrow
+                        emitScrollStep(true)
+                    }
+                    while pendingScrollLinear <= -scrollThrow {
+                        pendingScrollLinear += scrollThrow
+                        emitScrollStep(false)
                     }
                 }
             }
@@ -3172,18 +3393,31 @@ private struct RotaryControl: View {
     /// the readout. The first step of a gesture cancels a pending press so a
     /// turn is never also read as a select.
     private func emitStep(_ clockwise: Bool) {
-        if !isRotating {
-            isRotating = true
-            pendingPressTask?.cancel()
-            if isPressed {
-                isPressed = false
-                onPress(false)
-            }
-        }
+        beginRotationIfNeeded()
         onStep(clockwise)
         detentTick &+= 1
         stepBalance += clockwise ? 1 : -1
         revealReadout()
+    }
+
+    /// Emit one fine tick. Deliberately silent: at six per detent a haptic
+    /// would blur into a buzz, and the ±N readout counts detents, not ticks.
+    /// It still opens the gesture, because the fine stream is what moves first.
+    private func emitScrollStep(_ clockwise: Bool) {
+        beginRotationIfNeeded()
+        onScrollStep(clockwise)
+    }
+
+    /// The first motion of a gesture cancels a pending press so a turn is
+    /// never also read as a select.
+    private func beginRotationIfNeeded() {
+        guard !isRotating else { return }
+        isRotating = true
+        pendingPressTask?.cancel()
+        if isPressed {
+            isPressed = false
+            onPress(false)
+        }
     }
 
     private func revealReadout() {
@@ -3202,7 +3436,9 @@ private struct RotaryControl: View {
         lastDragAngle = nil
         lastLocation = nil
         pendingRotation = 0
+        pendingScrollRotation = 0
         pendingLinear = 0
+        pendingScrollLinear = 0
         stepBalance = 0
         touchStartedAt = Date()
 
@@ -4056,6 +4292,7 @@ private struct AdvancedDeviceSettings: View {
                 referenceRow("Agent keys", detail: "Press to switch. Double-press to bring the selected Mac app forward.")
                 referenceRow("Dial", detail: "Turn to change the focused composer control. Press to open it.")
                 referenceRow("Joystick", detail: "Only left toggles the sidebar on T3 Code; other directions follow their synced actions.")
+                referenceRow("Project picker", detail: "On T3 Code, NEW lists the synced projects. Each joystick push down or up steps one project — return to centre before the next step. SEND starts the chat in the highlighted project; NEW again cancels.")
                 referenceRow("Microphone", detail: "Hold to talk or double-press to latch.")
             }
 
