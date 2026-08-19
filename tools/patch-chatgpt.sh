@@ -928,7 +928,12 @@ try {
 module.exports = require(shimPath).nodehid;
 NODEHID_EOF
 
+# ChatGPT 26.814 renamed this chunk to service-<hash>.js. Try the historical
+# name first so a mixed build cannot match the wrong file.
 SERVICE_BUNDLE="$(find "$EXTRACTED/.vite/build" -maxdepth 1 -type f -name 'codex-micro-service-*.js' | head -1)"
+if [ -z "$SERVICE_BUNDLE" ]; then
+    SERVICE_BUNDLE="$(find "$EXTRACTED/.vite/build" -maxdepth 1 -type f -name 'service-*.js' | head -1)"
+fi
 [ -n "$SERVICE_BUNDLE" ] || die "patching" "The expected AgentMicro service bundle was not found."
 SERVICE_BUNDLE="$SERVICE_BUNDLE" "$NODE_BIN" <<'PATCH_SERVICE_EOF'
 const fs = require('fs');
@@ -952,13 +957,29 @@ const files = fs.readdirSync(process.env.BUILD_DIR)
   .map((name) => path.join(process.env.BUILD_DIR, name));
 const oldValue = 'unsubscribePrimaryWindowChanges;constructor(e){this.options=e,this.unsubscribePrimaryWindowChanges=e.windowManager.subscribePrimaryWindowChanges(e=>{this.setOwnerWindow(e)})}';
 const newValue = 'unsubscribePrimaryWindowChanges;constructor(e){this.options=e,this.unsubscribePrimaryWindowChanges=e.windowManager.subscribePrimaryWindowChanges(e=>{this.setOwnerWindow(e)}),this.getState().catch(()=>{})}';
-const matches = files.filter((file) => fs.readFileSync(file, 'utf8').includes(oldValue));
-if (matches.length !== 1 || files.some((file) => fs.readFileSync(file, 'utf8').includes(newValue))) {
+// 26.814 added sessionLockMonitor and routed the owner window through the
+// session lock. Both shapes are patched the same way: append the getState
+// warm-up to the constructor body.
+const oldLocked = 'unsubscribePrimaryWindowChanges;sessionLockMonitor=null;constructor(e){this.options=e,this.unsubscribePrimaryWindowChanges=e.windowManager.subscribePrimaryWindowChanges(e=>{this.setOwnerWindow(this.isSessionLocked()?null:e)})}';
+const newLocked = 'unsubscribePrimaryWindowChanges;sessionLockMonitor=null;constructor(e){this.options=e,this.unsubscribePrimaryWindowChanges=e.windowManager.subscribePrimaryWindowChanges(e=>{this.setOwnerWindow(this.isSessionLocked()?null:e)}),this.getState().catch(()=>{})}';
+const variants = [
+  { from: oldValue, to: newValue },
+  { from: oldLocked, to: newLocked },
+];
+const variant = variants.find((candidate) =>
+  files.some((file) => fs.readFileSync(file, 'utf8').includes(candidate.from))
+);
+if (variant === undefined) {
+  console.error('No pristine service manager constructor was found.');
+  process.exit(1);
+}
+const matches = files.filter((file) => fs.readFileSync(file, 'utf8').includes(variant.from));
+if (matches.length !== 1 || files.some((file) => fs.readFileSync(file, 'utf8').includes(variant.to))) {
   console.error(`Expected one pristine service manager; found ${matches.length}.`);
   process.exit(1);
 }
 const source = fs.readFileSync(matches[0], 'utf8');
-fs.writeFileSync(matches[0], source.replace(oldValue, newValue));
+fs.writeFileSync(matches[0], source.replace(variant.from, variant.to));
 PATCH_MAIN_EOF
 
 WEBVIEW_DIR="$EXTRACTED/webview/assets" "$NODE_BIN" <<'PATCH_RENDERER_EOF'
@@ -971,8 +992,10 @@ const files = fs.readdirSync(process.env.WEBVIEW_DIR)
     const value = fs.readFileSync(file, 'utf8');
     return value.includes('codex-micro-bridge-') && value.includes('3207467860');
   });
-const oldGate = () => /let s=n\|\|r\|\|i\|\|a\|\|o,c=[A-Za-z_$][\w$]*\(`3207467860`\),l;/g;
-const newGate = 'let s=n||r||i||a||o,c=!0,l;';
+// The declaration list after the gate grew from `l;` to `l=Y(ay),...` in
+// 26.814, so the match must stop at the comma.
+const oldGate = () => /let s=n\|\|r\|\|i\|\|a\|\|o,c=[A-Za-z_$][\w$]*\(`3207467860`\),/g;
+const newGate = 'let s=n||r||i||a||o,c=!0,';
 const matches = files.filter((file) => (fs.readFileSync(file, 'utf8').match(oldGate()) || []).length === 1);
 if (matches.length !== 1 || files.some((file) => fs.readFileSync(file, 'utf8').includes(newGate))) {
   console.error(`Expected one pristine renderer bridge gate; found ${matches.length}.`);

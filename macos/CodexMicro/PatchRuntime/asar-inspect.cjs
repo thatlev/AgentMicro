@@ -136,7 +136,11 @@ const nodeHIDFiles = files.filter((value) =>
   || /^node_modules\/@worklouder\/node-hid\/nodehid\.js$/.test(value)
 );
 const serviceFiles = files.filter((value) =>
+  // ChatGPT 26.814 renamed this chunk from codex-micro-service-<hash>.js to
+  // service-<hash>.js. The bundle contents are unchanged, so accept both
+  // rather than refusing to patch a supported build on a filename alone.
   /^\.vite\/build\/codex-micro-service-[^/]+\.js$/.test(value)
+  || /^\.vite\/build\/service-[^/]+\.js$/.test(value)
 );
 const mainFiles = files.filter((value) =>
   /^\.vite\/build\/main-[^/]+\.js$/.test(value)
@@ -153,9 +157,18 @@ const oldConstructor =
   'unsubscribePrimaryWindowChanges;constructor(e){this.options=e,this.unsubscribePrimaryWindowChanges=e.windowManager.subscribePrimaryWindowChanges(e=>{this.setOwnerWindow(e)})}';
 const newConstructor =
   'unsubscribePrimaryWindowChanges;constructor(e){this.options=e,this.unsubscribePrimaryWindowChanges=e.windowManager.subscribePrimaryWindowChanges(e=>{this.setOwnerWindow(e)}),this.getState().catch(()=>{})}';
-const newRendererGate = 'let s=n||r||i||a||o,c=!0,l;';
+// ChatGPT 26.814 added a sessionLockMonitor field and made the owner window
+// depend on the session lock. Matched by shape rather than by an exact string
+// so a new field between the two does not read as an unsupported build.
+const oldConstructorLocked =
+  'unsubscribePrimaryWindowChanges;sessionLockMonitor=null;constructor(e){this.options=e,this.unsubscribePrimaryWindowChanges=e.windowManager.subscribePrimaryWindowChanges(e=>{this.setOwnerWindow(this.isSessionLocked()?null:e)})}';
+const newConstructorLocked =
+  'unsubscribePrimaryWindowChanges;sessionLockMonitor=null;constructor(e){this.options=e,this.unsubscribePrimaryWindowChanges=e.windowManager.subscribePrimaryWindowChanges(e=>{this.setOwnerWindow(this.isSessionLocked()?null:e)}),this.getState().catch(()=>{})}';
+const newRendererGate = 'let s=n||r||i||a||o,c=!0,';
+// The declaration list after the gate grew from `l;` to `l=Y(ay),...`, so the
+// tail is no longer part of the match.
 const oldRendererGate =
-  /let s=n\|\|r\|\|i\|\|a\|\|o,c=[A-Za-z_$][\w$]*\(`3207467860`\),l;/g;
+  /let s=n\|\|r\|\|i\|\|a\|\|o,c=[A-Za-z_$][\w$]*\(`3207467860`\),/g;
 
 try {
   if (nodeHIDFiles.length !== 1 || serviceFiles.length !== 1 || mainFiles.length === 0) {
@@ -185,8 +198,12 @@ try {
   let newConstructorCount = 0;
   for (const file of mainFiles) {
     const source = readEntry(file).toString('utf8');
-    oldConstructorCount += countOccurrences(source, oldConstructor);
-    newConstructorCount += countOccurrences(source, newConstructor);
+    oldConstructorCount +=
+      countOccurrences(source, oldConstructor)
+      + countOccurrences(source, oldConstructorLocked);
+    newConstructorCount +=
+      countOccurrences(source, newConstructor)
+      + countOccurrences(source, newConstructorLocked);
   }
   const constructorState = classifySingle(
     oldConstructorCount,

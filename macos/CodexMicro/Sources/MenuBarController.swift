@@ -139,21 +139,22 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         statusDot.frame.origin = Self.statusDotOrigin(in: button)
     }
 
-    private static let statusDotSize: CGFloat = 5
+    private static let statusDotSize: CGFloat = 4
 
-    /// Pinned to the glyph's own corner rather than the button's edge. The
-    /// button is the full square the menu bar reserves, so anchoring to its
-    /// edge pushed the dot into the clear margin and made the item read wider
-    /// than the artwork actually is.
+    /// Kept wholly inside the glyph's own bounds. Centring the dot on the
+    /// artwork's corner left half of it outside, which is what still made the
+    /// item measure wider than its neighbours: the glyph is 14pt, but the
+    /// overhanging dot took the visible width to 15.5pt.
     private static func statusDotOrigin(in button: NSStatusBarButton) -> NSPoint {
-        let glyphWidth = button.image?.size.width ?? CodexMicroGlyph.canvasSize
-        let glyphInset = (button.bounds.width - glyphWidth) / 2
-        let artworkMaxX = button.bounds.maxX - glyphInset - CodexMicroGlyph.clearMargin
-        let artworkMinY = (button.bounds.height - glyphWidth) / 2 + CodexMicroGlyph.clearMargin
-        return NSPoint(
-            x: min(artworkMaxX - statusDotSize / 2, button.bounds.maxX - statusDotSize),
-            y: max(artworkMinY - statusDotSize / 2, 0)
-        )
+        let glyph = button.image?.size.width ?? CodexMicroGlyph.canvasSize
+        let glyphOriginX = (button.bounds.width - glyph) / 2
+        let glyphOriginY = (button.bounds.height - glyph) / 2
+        // Measure to the outer edge of the stroke, not the path, so the dot
+        // never lands beyond the ink and re-widens the item.
+        let halfStroke = CodexMicroGlyph.outlineWidth / 2
+        let artworkMaxX = glyphOriginX + glyph - CodexMicroGlyph.clearMargin + halfStroke
+        let artworkMinY = glyphOriginY + CodexMicroGlyph.clearMargin - halfStroke
+        return NSPoint(x: artworkMaxX - statusDotSize, y: artworkMinY)
     }
 
     @objc

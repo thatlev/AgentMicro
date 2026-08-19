@@ -122,7 +122,13 @@ enum CodexMicroGlyph {
     /// templates keep roughly a sixth of the square as clear margin; matching
     /// that is what makes an icon look like it belongs in the bar.
     static let canvasSize: CGFloat = 18
-    static let clearMargin: CGFloat = 2.4
+    /// Measured against the neighbouring system icons, which render 13pt of
+    /// ink. The outline stroke is centred on its path, so half the line width
+    /// falls outside the rect: the drawn ink is (canvas - 2*margin) + line.
+    /// A 2.4pt margin therefore still produced 14.4pt of ink, which is why the
+    /// icon kept reading wider than everything beside it.
+    static let clearMargin: CGFloat = 3.1
+    static let outlineWidth: CGFloat = 1.2
 
     static let image: NSImage = {
         let image = NSImage(
@@ -135,14 +141,14 @@ enum CodexMicroGlyph {
 
             let outline = NSBezierPath(
                 roundedRect: rect,
-                xRadius: 2.6,
-                yRadius: 2.6
+                xRadius: 2.3,
+                yRadius: 2.3
             )
-            outline.lineWidth = 1.2
+            outline.lineWidth = outlineWidth
             outline.stroke()
 
-            let keySize: CGFloat = 1.7
-            let spacing: CGFloat = 1.3
+            let keySize: CGFloat = 1.5
+            let spacing: CGFloat = 1.2
             let gridSize = (keySize * 3) + (spacing * 2)
             let originX = rect.midX - (gridSize / 2)
             let originY = rect.midY - (gridSize / 2)
