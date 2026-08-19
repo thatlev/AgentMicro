@@ -143,7 +143,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         statusDot.frame.origin = Self.statusDotOrigin(in: button)
     }
 
-    private static let statusDotSize: CGFloat = 4
+    private static let statusDotSize: CGFloat = 3.5
 
     /// Kept wholly inside the glyph's own bounds. Centring the dot on the
     /// artwork's corner left half of it outside, which is what still made the

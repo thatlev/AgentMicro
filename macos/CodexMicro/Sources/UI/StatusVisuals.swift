@@ -121,14 +121,21 @@ enum CodexMicroGlyph {
     /// edge to edge reads wider than every system icon beside it. AppKit's own
     /// templates keep roughly a sixth of the square as clear margin; matching
     /// that is what makes an icon look like it belongs in the bar.
-    static let canvasSize: CGFloat = 18
-    /// Measured against the neighbouring system icons, which render 13pt of
-    /// ink. The outline stroke is centred on its path, so half the line width
-    /// falls outside the rect: the drawn ink is (canvas - 2*margin) + line.
-    /// A 2.4pt margin therefore still produced 14.4pt of ink, which is why the
-    /// icon kept reading wider than everything beside it.
-    static let clearMargin: CGFloat = 3.1
-    static let outlineWidth: CGFloat = 1.2
+    /// The status item's window is the image width plus 16pt of padding the
+    /// system always adds, so the canvas is the only lever on how much room
+    /// the item takes. Padding the artwork inside a large canvas cost width
+    /// without making the mark any bigger, so the canvas is now sized to the
+    /// artwork itself: 14pt canvas -> 30pt window, against 36pt for the
+    /// system octagon beside it.
+    /// The system adds a fixed 16pt of padding around the image, so every
+    /// point of canvas is a point of extra width. The canvas is therefore the
+    /// mark itself with no surrounding air: 13pt -> 29pt window, against 36pt
+    /// for the system octagon beside it.
+    static let canvasSize: CGFloat = 13
+    /// Just enough to keep the stroke off the edge. The stroke is centred on
+    /// its path, so half the line width sits outside the rect.
+    static let clearMargin: CGFloat = 0.6
+    static let outlineWidth: CGFloat = 1.1
 
     static let image: NSImage = {
         let image = NSImage(
@@ -141,14 +148,14 @@ enum CodexMicroGlyph {
 
             let outline = NSBezierPath(
                 roundedRect: rect,
-                xRadius: 2.3,
-                yRadius: 2.3
+                xRadius: 2.1,
+                yRadius: 2.1
             )
             outline.lineWidth = outlineWidth
             outline.stroke()
 
-            let keySize: CGFloat = 1.5
-            let spacing: CGFloat = 1.2
+            let keySize: CGFloat = 1.35
+            let spacing: CGFloat = 1.05
             let gridSize = (keySize * 3) + (spacing * 2)
             let originX = rect.midX - (gridSize / 2)
             let originY = rect.midY - (gridSize / 2)
@@ -163,8 +170,8 @@ enum CodexMicroGlyph {
                     )
                     NSBezierPath(
                         roundedRect: keyRect,
-                        xRadius: 0.55,
-                        yRadius: 0.55
+                        xRadius: 0.5,
+                        yRadius: 0.5
                     ).fill()
                 }
             }
