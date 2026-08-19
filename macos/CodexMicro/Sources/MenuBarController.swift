@@ -19,7 +19,11 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     init(model: AppModel, onQuit: @escaping () -> Void) {
         self.model = model
         self.onQuit = onQuit
-        self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        // squareLength pins the item's window to a fixed 38pt no matter how
+        // small the artwork is, which is why shrinking the glyph never
+        // narrowed the item. variableLength sizes the window to the image, so
+        // an 18pt canvas costs 34pt against the 36pt a system icon takes.
+        self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
 
         configureStatusItem()
