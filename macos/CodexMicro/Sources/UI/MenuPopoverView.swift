@@ -113,12 +113,23 @@ struct MenuPopoverView: View {
                     .foregroundStyle(StatusTone.actionRequired.color)
             }
 
-            PatchActionButtons(
-                model: model,
-                compact: true,
-                onDialogPresented: onDialogPresented,
-                onDialogDismissed: onDialogDismissed
-            )
+            // Two disabled buttons read as a broken app. When neither action can
+            // run, show the recovery step instead, since none of these states
+            // resolve on their own.
+            if model.hasNoPatchAction {
+                Text(model.patchBlockedReason)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel("How to fix: \(model.patchBlockedReason)")
+            } else {
+                PatchActionButtons(
+                    model: model,
+                    compact: true,
+                    onDialogPresented: onDialogPresented,
+                    onDialogDismissed: onDialogDismissed
+                )
+            }
         }
         .padding(12)
         .background(
@@ -156,10 +167,11 @@ struct MenuPopoverView: View {
     }
 
     private var showsIntegrationAction: Bool {
-        let value = model.patchStatusText.lowercased()
-        return value.contains("required")
-            || value.contains("update")
-            || value.contains("unsupported")
+        // Driven by the model rather than by matching words in display text, so
+        // a copy change cannot silently hide the panel. "Not found" and
+        // "Runtime unavailable" matched none of the old keywords, which hid the
+        // only explanation the user would have received.
+        model.integrationNeedsAttention
     }
 
     private var integrationActionTitle: String {

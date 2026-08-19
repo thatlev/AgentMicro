@@ -131,8 +131,8 @@ function writeInfoPlist(destination) {
   );
 }
 
-function patchStatusFixture(directory, kind) {
-  const fixtureRoot = path.join(directory, `status-${kind}`);
+function patchStatusFixture(directory, kind, environmentOverrides = {}, label = kind) {
+  const fixtureRoot = path.join(directory, `status-${label}`);
   const appPath = path.join(fixtureRoot, 'ChatGPT.app');
   const resources = path.join(appPath, 'Contents', 'Resources');
   fs.mkdirSync(path.join(resources, 'app.asar.unpacked'), { recursive: true });
@@ -155,6 +155,7 @@ function patchStatusFixture(directory, kind) {
         CODEX_MICRO_LEGACY_BACKUP_ROOT: path.join(fixtureRoot, 'Legacy'),
         CODEX_MICRO_STATE_ROOT: path.join(fixtureRoot, 'State'),
         CODEX_MICRO_DEVELOPER_FALLBACK: '0',
+        ...environmentOverrides,
       },
     }
   );
@@ -195,6 +196,22 @@ try {
   assert.equal(currentStatus.patchState, 'compatible-patched');
   assert.equal(currentStatus.compatible, true);
 
+  // A pristine, unpatched install has no backup, so Restore is always
+  // unavailable. When the patch tooling is also incomplete Patch is disabled
+  // too, which used to leave both buttons grey behind a reason that claimed
+  // the build was supported and offered no way forward. The state stays
+  // accurate; the reason must name the real blocker.
+  const brokenRuntimeStatus = patchStatusFixture(
+    temporaryDirectory,
+    'pristine',
+    { CODEX_MICRO_SHIM: path.join(temporaryDirectory, 'missing-shim.js') },
+    'pristine-no-shim'
+  );
+  assert.equal(brokenRuntimeStatus.patchState, 'compatible-pristine');
+  assert.equal(brokenRuntimeStatus.canPatch, false);
+  assert.equal(brokenRuntimeStatus.canRestore, false);
+  assert.match(brokenRuntimeStatus.reason, /Reinstall AgentMicro/);
+
   const oldStatus = patchStatusFixture(temporaryDirectory, 'schema-1');
   assert.equal(oldStatus.patchState, 'integration-update-required');
   assert.equal(oldStatus.patched, true);
@@ -203,7 +220,7 @@ try {
   assert.match(oldStatus.reason, /Reinstall ChatGPT, then choose Patch ChatGPT/);
 
   process.stdout.write(
-    'asar-inspect/status fixture tests: PASS (5 inspector, 2 status cases)\n'
+    'asar-inspect/status fixture tests: PASS (5 inspector, 3 status cases)\n'
   );
 } finally {
   fs.rmSync(temporaryDirectory, { recursive: true, force: true });

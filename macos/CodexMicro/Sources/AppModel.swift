@@ -34,6 +34,14 @@ final class AppModel: ObservableObject {
     @Published private(set) var canPatch = false
     @Published private(set) var canRestore = false
     @Published private(set) var integrationNeedsUpdate = false
+    /// True when neither Patch nor Restore can run, so the UI must explain the
+    /// way out instead of presenting two disabled buttons and no next step.
+    @Published private(set) var hasNoPatchAction = false
+    /// The reason the current ChatGPT state offers no action.
+    @Published private(set) var patchBlockedReason = ""
+    /// True when the ChatGPT integration is not in a working patched state and
+    /// therefore needs the user to see the integration panel.
+    @Published private(set) var integrationNeedsAttention = false
 
     private let bridgeEngine: CodexMicroBridgeEngine
     private let patchManager: PatchManager
@@ -335,6 +343,11 @@ final class AppModel: ObservableObject {
         canPatch = patch.canPatch
         canRestore = patch.canRestore
         integrationNeedsUpdate = patch.state == .integrationUpdateRequired
+        hasNoPatchAction = !patch.canPatch && !patch.canRestore
+        patchBlockedReason = Self.blockedReason(for: patch)
+        // A healthy patched install still reports canRestore, so attention is
+        // decided by the state itself rather than by which buttons are live.
+        integrationNeedsAttention = patch.state != .compatiblePatched
         phoneStatus = phoneStatusText
         patchStatusText = patchStatus
         chatGPTStatus = chatGPTStatusText
@@ -537,6 +550,28 @@ final class AppModel: ObservableObject {
             return patchManager.snapshot.patched
                 ? "Patch needs update"
                 : "Unsupported build"
+        }
+    }
+
+    /// Every state that leaves both buttons disabled needs a recovery step the
+    /// user can actually perform, because none of them clear on their own.
+    nonisolated private static func blockedReason(
+        for patch: ChatGPTPatchSnapshot
+    ) -> String {
+        guard !patch.canPatch, !patch.canRestore else { return "" }
+        switch patch.state {
+        case .notInstalled:
+            return "ChatGPT is not installed. Install the ChatGPT desktop app, then choose Check connection."
+        case .runtimeUnavailable:
+            return "AgentMicro’s patch runtime is missing or incomplete. Reinstall AgentMicro, then choose Check connection."
+        case .integrationUpdateRequired:
+            return "The integration is out of date and no matching backup remains. Reinstall ChatGPT from openai.com, then choose Patch ChatGPT."
+        case .incompatible where patch.patched:
+            return "This ChatGPT was changed by a different AgentMicro version. Reinstall ChatGPT from openai.com to return it to a clean state."
+        case .incompatible:
+            return "This ChatGPT build is not supported yet. Nothing was modified; update AgentMicro and try again."
+        case .compatiblePristine, .compatiblePatched:
+            return "No patch action is available right now. Choose Check connection to re-read ChatGPT."
         }
     }
 

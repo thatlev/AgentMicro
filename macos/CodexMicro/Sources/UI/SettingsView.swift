@@ -253,7 +253,17 @@ private struct IntegrationSettingsTab: View {
                         .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    PatchActionButtons(model: model, compact: true)
+                    // Matches the menu popover: never leave the user facing two
+                    // disabled buttons with no stated way forward.
+                    if model.hasNoPatchAction {
+                        Text(model.patchBlockedReason)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityLabel("How to fix: \(model.patchBlockedReason)")
+                    } else {
+                        PatchActionButtons(model: model, compact: true)
+                    }
                 }
             }
         }

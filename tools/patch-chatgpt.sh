@@ -463,6 +463,15 @@ emit_status_json() {
     [ "$PATCH_STATE" = "compatible-pristine" ] && [ -n "$ASAR_MODE" ] && [ -n "$SHIM_SRC" ] && can_patch=true
     [ "$BACKUP_AVAILABLE" = true ] && can_restore=true
 
+    # A pristine build with incomplete patch tooling used to keep the
+    # "supported bundle structure" reason while Patch was disabled, and an
+    # unpatched install has no backup to restore. That left both buttons grey
+    # behind a reason claiming nothing was wrong. Report the real blocker so
+    # the UI can state a recovery step.
+    if [ "$PATCH_STATE" = "compatible-pristine" ] && [ "$can_patch" = false ]; then
+        STATUS_REASON="AgentMicro's patch runtime is incomplete, so ChatGPT cannot be patched. Reinstall AgentMicro."
+    fi
+
     printf '{"schemaVersion":2,"installed":%s,"running":%s,"path":"%s","bundleIdentifier":"%s","version":"%s","build":"%s","patchState":"%s","patched":%s,"compatible":%s,"backupAvailable":%s,"backupKind":"%s","canPatch":%s,"canRestore":%s,"reason":"%s"}\n' \
         "$installed" \
         "$RUNNING" \
