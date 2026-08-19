@@ -117,21 +117,32 @@ enum StatusTone: Equatable {
 }
 
 enum CodexMicroGlyph {
+    /// The menu bar reserves a square the height of the bar, so a glyph drawn
+    /// edge to edge reads wider than every system icon beside it. AppKit's own
+    /// templates keep roughly a sixth of the square as clear margin; matching
+    /// that is what makes an icon look like it belongs in the bar.
+    static let canvasSize: CGFloat = 18
+    static let clearMargin: CGFloat = 2.4
+
     static let image: NSImage = {
-        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { rect in
+        let image = NSImage(
+            size: NSSize(width: canvasSize, height: canvasSize),
+            flipped: false
+        ) { fullRect in
+            let rect = fullRect.insetBy(dx: clearMargin, dy: clearMargin)
             NSColor.black.setStroke()
             NSColor.black.setFill()
 
             let outline = NSBezierPath(
-                roundedRect: rect.insetBy(dx: 1.6, dy: 1.6),
-                xRadius: 3.1,
-                yRadius: 3.1
+                roundedRect: rect,
+                xRadius: 2.6,
+                yRadius: 2.6
             )
-            outline.lineWidth = 1.25
+            outline.lineWidth = 1.2
             outline.stroke()
 
-            let keySize: CGFloat = 2.05
-            let spacing: CGFloat = 1.55
+            let keySize: CGFloat = 1.7
+            let spacing: CGFloat = 1.3
             let gridSize = (keySize * 3) + (spacing * 2)
             let originX = rect.midX - (gridSize / 2)
             let originY = rect.midY - (gridSize / 2)

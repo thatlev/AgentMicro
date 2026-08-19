@@ -47,10 +47,8 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         button.setAccessibilityHelp("Open AgentMicro connection status and controls.")
 
         statusDot.frame = NSRect(
-            x: max(button.bounds.maxX - 8, 14),
-            y: 2,
-            width: 6,
-            height: 6
+            origin: Self.statusDotOrigin(in: button),
+            size: NSSize(width: Self.statusDotSize, height: Self.statusDotSize)
         )
         statusDot.autoresizingMask = [.minXMargin, .maxYMargin]
         button.addSubview(statusDot, positioned: .above, relativeTo: nil)
@@ -138,9 +136,23 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         button.setAccessibilityHelp("\(tooltip). Click to open status and controls.")
 
         button.layoutSubtreeIfNeeded()
-        statusDot.frame.origin = NSPoint(
-            x: max(button.bounds.maxX - 8, 14),
-            y: 2
+        statusDot.frame.origin = Self.statusDotOrigin(in: button)
+    }
+
+    private static let statusDotSize: CGFloat = 5
+
+    /// Pinned to the glyph's own corner rather than the button's edge. The
+    /// button is the full square the menu bar reserves, so anchoring to its
+    /// edge pushed the dot into the clear margin and made the item read wider
+    /// than the artwork actually is.
+    private static func statusDotOrigin(in button: NSStatusBarButton) -> NSPoint {
+        let glyphWidth = button.image?.size.width ?? CodexMicroGlyph.canvasSize
+        let glyphInset = (button.bounds.width - glyphWidth) / 2
+        let artworkMaxX = button.bounds.maxX - glyphInset - CodexMicroGlyph.clearMargin
+        let artworkMinY = (button.bounds.height - glyphWidth) / 2 + CodexMicroGlyph.clearMargin
+        return NSPoint(
+            x: min(artworkMaxX - statusDotSize / 2, button.bounds.maxX - statusDotSize),
+            y: max(artworkMinY - statusDotSize / 2, 0)
         )
     }
 
@@ -331,11 +343,18 @@ private final class StatusDotView: NSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
-        layer?.cornerRadius = frameRect.width / 2
         layer?.backgroundColor = color.cgColor
         layer?.borderWidth = 1
         layer?.borderColor = NSColor.windowBackgroundColor.withAlphaComponent(0.8).cgColor
         setAccessibilityElement(false)
+    }
+
+    /// Derived from the live bounds rather than the init frame. The view is
+    /// created with a zero frame and sized afterwards, so a radius captured at
+    /// init left the dot square.
+    override func layout() {
+        super.layout()
+        layer?.cornerRadius = bounds.width / 2
     }
 
     @available(*, unavailable)
