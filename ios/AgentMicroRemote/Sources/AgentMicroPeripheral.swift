@@ -119,7 +119,7 @@ struct WorkspaceBridgeState: Equatable {
     var issue: String?
 }
 
-/// The host's `agent-micro-layout` setting. ChatGPT persists it to
+/// The host's `codex-micro-layout` setting. ChatGPT persists it to
 /// ~/.codex/config.toml but never sends it over the device protocol, so
 /// tools/AgentMicroBridge watches that file and relays the layout as
 /// channel-3 config reports on the bridge output characteristic. Until the
@@ -1088,11 +1088,11 @@ final class AgentMicroPeripheral: NSObject, ObservableObject {
             return
         }
         switch object["type"] as? String {
-        case "agent-micro-layout":
+        case "codex-micro-layout":
             applyLayout(object)
             let brightness = lightingBrightness.map { " · brightness \(Int(($0 * 100).rounded()))%" } ?? ""
             log("layout synced: \(AgentMicroLayout.slotOrder.map { layout.binding(forSlot: $0).keycapId }.joined(separator: " "))\(brightness)")
-        case "agent-micro-state":
+        case "codex-micro-state":
             if let array = object["slots"] as? [[String: Any]] {
                 updateSlots(array, surface: "chatgpt")
                 log("agent lighting refreshed from Mac bridge")

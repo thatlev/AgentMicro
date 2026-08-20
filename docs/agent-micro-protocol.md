@@ -343,7 +343,7 @@ layout and durable lighting-brightness setting from `~/.codex/config.toml` to
 the AgentMicroRemote iPhone app, so its command-key legends and read-only
 brightness display follow the desktop settings. It is chunked exactly like
 channel 2 (`[6][3][len][payload…]`) but carries a bare-JSON
-`agent-micro-layout` settings snapshot and flows bridge→phone only — it is
+`codex-micro-layout` settings snapshot and flows bridge→phone only — it is
 never written toward the ChatGPT shim, so the host never sees it.
 In auto mode the same channel also carries `vscode-state` snapshots (targets,
 direct v2 pins, selected target, extension connection state).
@@ -643,6 +643,6 @@ Local build evidence:
 - bundled `@worklouder/device-kit-oai` version `0.1.10` and nested
   `@worklouder/wl-device-kit`
 - current main-process `codex-micro-service-*.js` and webview chunks
-  `agent-micro-bridge`, `agent-micro-layout`, `agent-micro-slot-signals`, and
+  `agent-micro-bridge`, `codex-micro-layout`, `agent-micro-slot-signals`, and
   `agent-micro-settings`
 - `/Applications/ChatGPT.app/Contents/Info.plist`

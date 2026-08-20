@@ -117,65 +117,87 @@ enum StatusTone: Equatable {
 }
 
 enum AgentMicroGlyph {
-    /// The menu bar reserves a square the height of the bar, so a glyph drawn
-    /// edge to edge reads wider than every system icon beside it. AppKit's own
-    /// templates keep roughly a sixth of the square as clear margin; matching
-    /// that is what makes an icon look like it belongs in the bar.
-    /// The status item's window is the image width plus 16pt of padding the
-    /// system always adds, so the canvas is the only lever on how much room
-    /// the item takes. Padding the artwork inside a large canvas cost width
-    /// without making the mark any bigger, so the canvas is now sized to the
-    /// artwork itself: 14pt canvas -> 30pt window, against 36pt for the
-    /// system octagon beside it.
-    /// The system adds a fixed 16pt of padding around the image, so every
-    /// point of canvas is a point of extra width. The canvas is therefore the
-    /// mark itself with no surrounding air: 13pt -> 29pt window, against 36pt
-    /// for the system octagon beside it.
-    static let canvasSize: CGFloat = 13
+    /// Width is what costs menu bar room: the status item's window is the
+    /// image width plus a fixed 16pt of system padding. 16pt of mark gives a
+    /// 32pt item, against the 36pt a system icon beside it takes.
+    static let canvasSize: CGFloat = 16
+
+    /// Height is free, and it decides where the mark sits relative to the
+    /// popover's arrow.
+    ///
+    /// The button is always the full height of the menu bar and the arrow
+    /// points at its bottom edge, so a square image leaves the mark floating
+    /// with dead space beneath it and the arrow reads as detached. Drawing on
+    /// a canvas as tall as the button, with the mark at its base, closes that
+    /// to roughly a point without changing the width at all.
+    static let canvasHeight: CGFloat = 22
+
+    /// Keeps the mark optically centred in the bar rather than sitting on the
+    /// floor of its canvas.
+    static let baselineInset: CGFloat = 3
     /// Just enough to keep the stroke off the edge. The stroke is centred on
     /// its path, so half the line width sits outside the rect.
     static let clearMargin: CGFloat = 0.6
     static let outlineWidth: CGFloat = 1.1
 
+    /// Draws the mark inside `markRect`: a rounded outline with a 3x3 grid of
+    /// keys, matching the pad the phone stands in for.
+    private static func drawMark(in markRect: NSRect) {
+        let rect = markRect.insetBy(dx: clearMargin, dy: clearMargin)
+        NSColor.black.setStroke()
+        NSColor.black.setFill()
+
+        let outline = NSBezierPath(roundedRect: rect, xRadius: 2.6, yRadius: 2.6)
+        outline.lineWidth = outlineWidth
+        outline.stroke()
+
+        let keySize: CGFloat = 1.7
+        let spacing: CGFloat = 1.3
+        let gridSize = (keySize * 3) + (spacing * 2)
+        let originX = rect.midX - (gridSize / 2)
+        let originY = rect.midY - (gridSize / 2)
+
+        for row in 0..<3 {
+            for column in 0..<3 {
+                let keyRect = NSRect(
+                    x: originX + CGFloat(column) * (keySize + spacing),
+                    y: originY + CGFloat(row) * (keySize + spacing),
+                    width: keySize,
+                    height: keySize
+                )
+                NSBezierPath(roundedRect: keyRect, xRadius: 0.5, yRadius: 0.5).fill()
+            }
+        }
+    }
+
+    /// The menu bar image: mark-width, button-height, mark at the base.
     static let image: NSImage = {
+        let image = NSImage(
+            size: NSSize(width: canvasSize, height: canvasHeight),
+            flipped: false
+        ) { fullRect in
+            drawMark(
+                in: NSRect(
+                    x: fullRect.minX,
+                    y: fullRect.minY + baselineInset,
+                    width: canvasSize,
+                    height: canvasSize
+                )
+            )
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "AgentMicro"
+        return image
+    }()
+
+    /// The same mark on a square canvas, for use inside normal layout.
+    static let squareImage: NSImage = {
         let image = NSImage(
             size: NSSize(width: canvasSize, height: canvasSize),
             flipped: false
         ) { fullRect in
-            let rect = fullRect.insetBy(dx: clearMargin, dy: clearMargin)
-            NSColor.black.setStroke()
-            NSColor.black.setFill()
-
-            let outline = NSBezierPath(
-                roundedRect: rect,
-                xRadius: 2.1,
-                yRadius: 2.1
-            )
-            outline.lineWidth = outlineWidth
-            outline.stroke()
-
-            let keySize: CGFloat = 1.35
-            let spacing: CGFloat = 1.05
-            let gridSize = (keySize * 3) + (spacing * 2)
-            let originX = rect.midX - (gridSize / 2)
-            let originY = rect.midY - (gridSize / 2)
-
-            for row in 0..<3 {
-                for column in 0..<3 {
-                    let keyRect = NSRect(
-                        x: originX + CGFloat(column) * (keySize + spacing),
-                        y: originY + CGFloat(row) * (keySize + spacing),
-                        width: keySize,
-                        height: keySize
-                    )
-                    NSBezierPath(
-                        roundedRect: keyRect,
-                        xRadius: 0.5,
-                        yRadius: 0.5
-                    ).fill()
-                }
-            }
-
+            drawMark(in: fullRect)
             return true
         }
         image.isTemplate = true
@@ -188,7 +210,9 @@ struct MicroGlyphView: View {
     var size: CGFloat = 18
 
     var body: some View {
-        Image(nsImage: AgentMicroGlyph.image)
+        // The menu bar image is deliberately taller than it is wide, so
+        // squeezing it into a square frame here would distort the mark.
+        Image(nsImage: AgentMicroGlyph.squareImage)
             .resizable()
             .interpolation(.high)
             .frame(width: size, height: size)

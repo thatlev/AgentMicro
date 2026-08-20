@@ -20,7 +20,7 @@ const { EventEmitter } = require('events');
 const { TextDecoder } = require('util');
 
 const SOCKET_PATH = process.env.CODEX_BRIDGE_SOCKET
-  || path.join(os.tmpdir(), 'AgentMicro', 'codexbridge.sock');
+  || path.join(os.tmpdir(), 'CodexMicro', 'codexbridge.sock');
 // Read by the menu app's ASAR inspector. Bump this whenever the injected shim
 // protocol or safety semantics change in a way that requires re-patching.
 const CODEX_MICRO_SHIM_SCHEMA = 2;
@@ -28,7 +28,7 @@ const REPORT_ID = 6;
 const VID = 12346;   // 0x303A
 const PID = 33632;   // 0x8360
 const USAGE_PAGE = 65280; // 0xFF00
-const FAKE_PATH = 'codex-bridge://virtual/agent-micro';
+const FAKE_PATH = 'codex-bridge://virtual/codex-micro';
 
 // AgentMicro-only control channel (device→shim). Not part of the AgentMicro
 // wire protocol — mirrors the bridge's channel-3 layout sync but flows the
@@ -320,7 +320,7 @@ function createBridge() {
       path: FAKE_PATH,
       serialNumber: 'CODEXBRIDGE0001',
       manufacturer: 'Work Louder',
-      product: 'AgentMicro',
+      product: 'Codex Micro',
       release: 0,          // even => isUsbConnection true (release % 4 === 0)
       interface: -1,
       usagePage: USAGE_PAGE,

@@ -14,7 +14,23 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     private var localEventMonitor: Any?
     private var globalEventMonitor: Any?
     private var appResignActiveObserver: NSObjectProtocol?
+    private var spaceChangeObserver: NSObjectProtocol?
+    private var screenChangeObserver: NSObjectProtocol?
     private var isDialogPresented = false
+
+    /// When an outside click last dismissed the popover.
+    ///
+    /// Clicking the status item while the popover is open delivers mouse-down
+    /// and mouse-up as one physical click. The global monitor sees the
+    /// mouse-down and closes, then the button's action fires on mouse-up and
+    /// reopens it — so a click that should have toggled the popover shut left
+    /// it open, and rapid clicking only highlighted the icon while the popover
+    /// appeared stuck.
+    private var lastOutsideClickCloseAt: Date?
+
+    /// A mouse-up follows its mouse-down within a few milliseconds. Anything
+    /// inside this window belongs to the click that already closed the popover.
+    private static let sameClickInterval: TimeInterval = 0.4
 
     init(model: AppModel, onQuit: @escaping () -> Void) {
         self.model = model
@@ -58,6 +74,42 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         // fixed margin above the badge is maxYMargin, not minYMargin.
         statusDot.autoresizingMask = [.minXMargin, .maxYMargin]
         button.addSubview(statusDot, positioned: .above, relativeTo: nil)
+        installStatusGeometryObservers()
+    }
+
+    /// Keep the status item's measured frame honest across Space switches and
+    /// display changes.
+    ///
+    /// Both events can leave AppKit holding a frame for the item that no
+    /// longer matches where it is drawn. The popover is then placed against
+    /// that stale frame: it opens away from the icon, or on the display the
+    /// item used to be on. Re-asserting the length forces a fresh measurement,
+    /// which costs nothing when the geometry was already correct.
+    private func installStatusGeometryObservers() {
+        spaceChangeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.remeasureStatusItem() }
+        }
+
+        screenChangeObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.remeasureStatusItem() }
+        }
+    }
+
+    private func remeasureStatusItem() {
+        guard statusItem.button != nil else { return }
+        // A shown popover is anchored to the old frame, so it has to go before
+        // the item re-measures; leaving it up is what stranded it on the
+        // previous display.
+        if popover.isShown { closePopover() }
+        statusItem.length = NSStatusItem.variableLength
     }
 
     private func configurePopover() {
@@ -155,13 +207,21 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     /// badge at the top leaves the arrow's approach clear, and the top corner
     /// is where macOS puts unread and attention badges anyway.
     private static func statusDotOrigin(in button: NSStatusBarButton) -> NSPoint {
-        let glyph = button.image?.size.width ?? AgentMicroGlyph.canvasSize
-        let glyphOriginX = (button.bounds.width - glyph) / 2
-        let glyphOriginY = (button.bounds.height - glyph) / 2
+        let mark = AgentMicroGlyph.canvasSize
+        let imageSize = button.image?.size
+            ?? NSSize(width: mark, height: AgentMicroGlyph.canvasHeight)
+        // The image is taller than the mark, and the mark sits at its base.
+        let imageOriginX = (button.bounds.width - imageSize.width) / 2
+        let imageOriginY = (button.bounds.height - imageSize.height) / 2
+        let glyphOriginX = imageOriginX
+        // Flipped view: the mark's base is the image's *largest* y, so the
+        // mark's top edge is that base minus the mark's own height.
+        let markBaseY = imageOriginY + imageSize.height - AgentMicroGlyph.baselineInset
+        let glyphOriginY = markBaseY - mark
         // Measure to the outer edge of the stroke, not the path, so the dot
         // never lands beyond the ink and re-widens the item.
         let halfStroke = AgentMicroGlyph.outlineWidth / 2
-        let artworkMaxX = glyphOriginX + glyph - AgentMicroGlyph.clearMargin + halfStroke
+        let artworkMaxX = glyphOriginX + mark - AgentMicroGlyph.clearMargin + halfStroke
         // NSStatusBarButton is flipped: y grows downwards, so the glyph's top
         // edge is its *smallest* y. Computing this as though the view were
         // unflipped put the badge back at the bottom, in the arrow's path.
@@ -176,6 +236,10 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
             return
         }
 
+        // The mouse-down half of this same click already closed the popover.
+        // Reopening now would make a click on the item fail to toggle it shut.
+        if consumeRecentOutsideClickClose() { return }
+
         guard let button = statusItem.button else { return }
         endDismissalMonitoring()
         popover.animates = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -185,24 +249,37 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         beginDismissalMonitoring()
     }
 
-    /// Usage4Claude promotes its shown popover to a key pop-up-menu-level window.
-    /// Besides keeping it above normal app windows, this gives AppKit ownership
-    /// of the active appearance and the complete system presentation transition.
+    private func consumeRecentOutsideClickClose() -> Bool {
+        guard let lastOutsideClickCloseAt else { return false }
+        self.lastOutsideClickCloseAt = nil
+        return Date().timeIntervalSince(lastOutsideClickCloseAt) < Self.sameClickInterval
+    }
+
+    /// Screen frame of the status item, padded because the item is small and
+    /// the menu bar is a coarse click target.
+    private func statusItemFrame() -> NSRect {
+        guard let button = statusItem.button, let window = button.window else { return .null }
+        let inWindow = button.convert(button.bounds, to: nil)
+        return window.convertToScreen(inWindow).insetBy(dx: -4, dy: -4)
+    }
+
+    /// Give the popover key status so its SwiftUI controls receive clicks.
+    ///
+    /// The popover hosts confirmation alerts for patch and restore, so it
+    /// cannot be `.transient`: AppKit would dismiss it the moment the alert
+    /// took over. That means this controller has to make the window key
+    /// itself.
+    ///
+    /// It deliberately does not call `NSApp.activate(ignoringOtherApps:)`.
+    /// Activating a menu bar accessory steals focus from the app the user was
+    /// in, and forcing activation while the status bar is laying out is what
+    /// made every icon in the bar flicker on each click. Making the window key
+    /// is enough for the controls to work, and leaves the frontmost app alone.
     private func configurePopoverWindow() {
         guard let popoverWindow = popover.contentViewController?.view.window else { return }
         popoverWindow.level = .popUpMenu
         popoverWindow.collectionBehavior.insert(.fullScreenAuxiliary)
-
-        // A window can only become key while its app is active, and app
-        // activation completes asynchronously. Re-assert key status on the
-        // following run-loop turns as well; without a key popover window,
-        // SwiftUI treats every click as window activation and the buttons
-        // never fire.
-        NSApp.activate(ignoringOtherApps: true)
-        popoverWindow.makeKeyAndOrderFront(nil)
-        DispatchQueue.main.async { [weak popoverWindow] in
-            popoverWindow?.makeKeyAndOrderFront(nil)
-        }
+        popoverWindow.makeKey()
     }
 
     private func closePopover() {
@@ -243,12 +320,20 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         globalEventMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown]
         ) { [weak self] _ in
+            let location = NSEvent.mouseLocation
             DispatchQueue.main.async {
                 guard let self, !self.isDialogPresented else { return }
+                // A click on the status item is not an outside click. Closing
+                // on its mouse-down races the button's mouse-up action, which
+                // then reopens the popover instead of toggling it shut.
+                guard !self.statusItemFrame().contains(location) else { return }
                 // Global monitors receive events delivered to other apps, not
                 // this app. Local alert and popover clicks therefore never
                 // enter the outside-click dismissal path.
                 self.closePopover()
+                // Recorded either way: the pointer can sit fractionally outside
+                // the item while the click still targets it.
+                self.lastOutsideClickCloseAt = Date()
             }
         }
 

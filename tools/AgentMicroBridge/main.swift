@@ -188,7 +188,10 @@ let tagT3Client: UInt8 = 0x54 // 'T'
 
 func defaultCodexBridgeSocketPath() -> String {
     let directory = (NSTemporaryDirectory() as NSString)
-        .appendingPathComponent("AgentMicro")
+        // Matches the path compiled into shims already installed inside
+        // patched ChatGPT copies. Renaming it stranded the two on separate
+        // sockets and the end-to-end check could never complete.
+        .appendingPathComponent("CodexMicro")
     try? FileManager.default.createDirectory(
         atPath: directory,
         withIntermediateDirectories: true,
@@ -530,7 +533,7 @@ final class SocketServer {
 
 // MARK: - AgentMicro layout (key binding) model + config.toml parsing
 
-/// The host's `agent-micro-layout` setting. ChatGPT persists it to
+/// The host's `codex-micro-layout` setting. ChatGPT persists it to
 /// ~/.codex/config.toml but never sends it to the device, so the bridge reads
 /// the file itself and pushes it to the iPhone over channel 3.
 struct AgentMicroLayout: Equatable {
@@ -565,11 +568,11 @@ struct AgentMicroLayout: Equatable {
         lightingBrightness: 100
     )
 
-    /// Parse the [desktop.agent-micro-layout] table out of config.toml,
+    /// Parse the [desktop.codex-micro-layout] table out of config.toml,
     /// merged over `defaults`. Anything unreadable yields the defaults.
     static func load(from path: String) -> AgentMicroLayout {
         guard let text = try? String(contentsOfFile: path, encoding: .utf8) else { return defaults }
-        let prefix = "desktop.agent-micro-layout"
+        let prefix = "desktop.codex-micro-layout"
         var layout = defaults
         var section = ""
         for rawLine in text.components(separatedBy: .newlines) {
@@ -581,7 +584,7 @@ struct AgentMicroLayout: Equatable {
             guard let eq = line.firstIndex(of: "=") else { continue }
             let key = line[..<eq].trimmingCharacters(in: .whitespaces)
             guard let value = unquote(String(line[line.index(after: eq)...])) else { continue }
-            if section == "desktop", key == "agent-micro-lighting-brightness" {
+            if section == "desktop", key == "codex-micro-lighting-brightness" {
                 if let percent = Int(value) {
                     layout.lightingBrightness = min(max(percent, 0), 100)
                 }
@@ -663,7 +666,7 @@ struct AgentMicroLayout: Equatable {
             if let action = analogStick[dir] { stickObj[dir] = action }
         }
         let obj: [String: Any] = [
-            "type": "agent-micro-layout",
+            "type": "codex-micro-layout",
             "version": 1,
             "slots": slotsObj,
             "analogStick": stickObj,
@@ -1959,7 +1962,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
             requestHostResync()
             return
         }
-        var object: [String: Any] = ["type": "agent-micro-state", "version": 1]
+        var object: [String: Any] = ["type": "codex-micro-state", "version": 1]
         if let cachedAgentSlots { object["slots"] = cachedAgentSlots }
         if let cachedZones { object["zones"] = cachedZones }
         guard let json = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) else { return }
@@ -4721,7 +4724,9 @@ if target == .auto, !emulate {
     let statusPath = (NSHomeDirectory() as NSString).appendingPathComponent("Library/Caches/CodexMicro/status.json")
     let lights = StatusLights(path: statusPath)
     let bridge = Bridge(server: server)
-    let activeControlTargetDefaultsKey = "AgentMicroBridge.activeControlTarget"
+    // Stored under the original name so an existing install keeps the control
+    // target the user last chose. Renaming the key silently reset it.
+    let activeControlTargetDefaultsKey = "CodexMicroBridge.activeControlTarget"
     // The installed helper's bundle id already owns the standard defaults
     // domain. Opening that same id as an explicit suite produces a macOS
     // warning and is not guaranteed to persist.
