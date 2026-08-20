@@ -330,6 +330,7 @@ struct OnboardingView: View {
             VStack(spacing: 10) {
                 supportRow(
                     icon: "at",
+                    assetName: "LevProfilePicture",
                     title: "Follow @thatlevco on X",
                     detail: "Product updates, demos, and new builds.",
                     completed: openedX
@@ -540,6 +541,7 @@ struct OnboardingView: View {
 
     private func supportRow(
         icon: String,
+        assetName: String? = nil,
         title: String,
         detail: String,
         completed: Bool,
@@ -547,10 +549,19 @@ struct OnboardingView: View {
     ) -> some View {
         Button(action: action) {
             HStack(spacing: 14) {
-                Image(systemName: icon)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(completed ? .green : Color.accentColor)
-                    .frame(width: 34)
+                Group {
+                    if let assetName {
+                        Image(assetName)
+                            .resizable()
+                            .scaledToFill()
+                            .clipShape(Circle())
+                    } else {
+                        Image(systemName: icon)
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(completed ? .green : Color.accentColor)
+                    }
+                }
+                .frame(width: 34, height: 34)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title).font(.headline)
                     Text(detail).font(.caption).foregroundStyle(.secondary)
