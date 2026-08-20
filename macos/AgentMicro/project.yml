@@ -44,6 +44,18 @@ targets:
         LD_RUNPATH_SEARCH_PATHS:
           - "$(inherited)"
           - "@executable_path/../Frameworks"
+  AgentMicroTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: Tests
+    dependencies:
+      - target: AgentMicro
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGNING_ALLOWED: NO
 
 schemes:
   AgentMicro:
@@ -52,5 +64,9 @@ schemes:
         AgentMicro: all
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - AgentMicroTests
     archive:
       config: Release

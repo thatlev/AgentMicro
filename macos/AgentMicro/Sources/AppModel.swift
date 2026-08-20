@@ -42,6 +42,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var hasNoPatchAction = false
     /// The reason the current ChatGPT state offers no action.
     @Published private(set) var patchBlockedReason = ""
+    /// True only for a scanner-rejected ChatGPT bundle, where the useful next
+    /// action is to hand an exact, documented repair request to a coding agent.
+    @Published private(set) var canCopyAgentRepairPrompt = false
+    @Published private(set) var agentRepairPromptCopied = false
     /// True when the ChatGPT integration is not in a working patched state and
     /// therefore needs the user to see the integration panel.
     @Published private(set) var integrationNeedsAttention = false
@@ -57,6 +61,7 @@ final class AppModel: ObservableObject {
     private var bridgeStatus = AgentMicroBridgeStatus()
     private var refreshTask: Task<Void, Never>?
     private var presentationTask: Task<Void, Never>?
+    private var repairPromptConfirmationTask: Task<Void, Never>?
     private var operationFailure: String?
     private var operationMessage: String?
     private var hasStarted = false
@@ -157,6 +162,8 @@ final class AppModel: ObservableObject {
         refreshTask = nil
         presentationTask?.cancel()
         presentationTask = nil
+        repairPromptConfirmationTask?.cancel()
+        repairPromptConfirmationTask = nil
         let notificationCenter = NSWorkspace.shared.notificationCenter
         for token in workspaceObservationTokens {
             notificationCenter.removeObserver(token)
@@ -311,6 +318,37 @@ final class AppModel: ObservableObject {
         AppLogStore.shared.append("Copied redacted diagnostics")
     }
 
+    func copyAgentRepairPrompt() {
+        let snapshot = patchManager.snapshot
+        guard snapshot.installed, snapshot.state == .incompatible else { return }
+
+        let prompt = ChatGPTRepairPrompt.make(
+            version: snapshot.version,
+            build: snapshot.build,
+            bundleIdentifier: snapshot.bundleIdentifier,
+            patchState: snapshot.patched ? "incompatible-patched" : "incompatible-pristine",
+            reason: snapshot.reason
+        )
+        NSPasteboard.general.clearContents()
+        guard NSPasteboard.general.setString(prompt, forType: .string) else {
+            operationFailure = "The repair prompt could not be copied to the clipboard."
+            recomputePresentation()
+            return
+        }
+
+        operationFailure = nil
+        publishIfChanged(\.agentRepairPromptCopied, true)
+        AppLogStore.shared.append(
+            "Copied unsupported ChatGPT repair prompt for \(snapshot.version) (\(snapshot.build))"
+        )
+        repairPromptConfirmationTask?.cancel()
+        repairPromptConfirmationTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(700))
+            guard !Task.isCancelled else { return }
+            self?.publishIfChanged(\.agentRepairPromptCopied, false)
+        }
+    }
+
     func openLogs() {
         let logURL = AppLogStore.shared.logURL
         if FileManager.default.fileExists(atPath: logURL.path) {
@@ -365,6 +403,10 @@ final class AppModel: ObservableObject {
         publishIfChanged(\.canRestore, patch.canRestore)
         publishIfChanged(\.integrationNeedsUpdate, patch.state == .integrationUpdateRequired)
         publishIfChanged(\.hasNoPatchAction, !patch.canPatch && !patch.canRestore)
+        publishIfChanged(
+            \.canCopyAgentRepairPrompt,
+            patch.installed && patch.state == .incompatible
+        )
         publishIfChanged(\.patchBlockedReason, isPatchStatusReady
             ? Self.blockedReason(for: patch)
             : "Checking the installed ChatGPT build…")
@@ -600,7 +642,7 @@ final class AppModel: ObservableObject {
         case .incompatible where patch.patched:
             return "This ChatGPT was changed by a different AgentMicro version. Reinstall ChatGPT from openai.com to return it to a clean state."
         case .incompatible:
-            return "This ChatGPT build is not supported yet. Nothing was modified; update AgentMicro and try again."
+            return "This ChatGPT build is not supported yet. Nothing was modified. Copy the repair prompt and give it to a coding agent."
         case .compatiblePristine, .compatiblePatched:
             return "No patch action is available right now. Choose Check connection to re-read ChatGPT."
         }
@@ -688,7 +730,7 @@ final class AppModel: ObservableObject {
         case .integrationUpdateRequired:
             content.body = "Restore ChatGPT, then patch it to update the AgentMicro integration."
         default:
-            content.body = "This ChatGPT build no longer matches the supported integration."
+            content.body = "This ChatGPT build is unsupported. Open AgentMicro and copy its agent repair prompt."
         }
         content.sound = .default
         let request = UNNotificationRequest(

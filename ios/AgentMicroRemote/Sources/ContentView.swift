@@ -3858,7 +3858,7 @@ private struct DeviceDetailsSheet: View {
                             .fixedSize(horizontal: false, vertical: true)
 
                         if selectedCodexMicSource == .iphone {
-                            Text("The MIC key records on this iPhone and transcribes on-device, then types the text into ChatGPT's composer — so you speak into the phone you're holding, not the Mac. Requires the ChatGPT bridge shim (re-run tools/patch-chatgpt.sh once, and again after ChatGPT updates).")
+                            Text("The MIC key records on this iPhone and transcribes on-device, then types the text into ChatGPT's composer, so you speak into the phone you're holding, not the Mac. Requires the ChatGPT bridge shim (re-run tools/patch-chatgpt.sh once, and again after ChatGPT updates).")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -4292,7 +4292,7 @@ private struct AdvancedDeviceSettings: View {
                 referenceRow("Agent keys", detail: "Press to switch. Double-press to bring the selected Mac app forward.")
                 referenceRow("Dial", detail: "Turn to change the focused composer control. Press to open it.")
                 referenceRow("Joystick", detail: "Only left toggles the sidebar on T3 Code; other directions follow their synced actions.")
-                referenceRow("Project picker", detail: "On T3 Code, NEW lists the synced projects. Each joystick push down or up steps one project — return to centre before the next step. SEND starts the chat in the highlighted project; NEW again cancels.")
+                referenceRow("Project picker", detail: "On T3 Code, NEW lists the synced projects. Each joystick push down or up steps one project. Return to centre before the next step. SEND starts the chat in the highlighted project; NEW again cancels.")
                 referenceRow("Microphone", detail: "Hold to talk or double-press to latch.")
             }
 

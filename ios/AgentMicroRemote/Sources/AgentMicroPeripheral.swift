@@ -367,7 +367,7 @@ final class AgentMicroPeripheral: NSObject, ObservableObject {
         guard macConnectionState != state || macConnectionDetail != detail else { return }
         macConnectionState = state
         macConnectionDetail = detail
-        log("connection state: \(state.rawValue) — \(detail)")
+        log("connection state: \(state.rawValue): \(detail)")
         updateConnectionRecoveryWatchdog()
     }
 
@@ -1468,7 +1468,7 @@ extension AgentMicroPeripheral: CBPeripheralManagerDelegate {
 
             if let error {
                 let nsError = error as NSError
-                log("add service \(service.uuid) error: \(nsError.domain) \(nsError.code) — \(nsError.localizedDescription)")
+                log("add service \(service.uuid) error: \(nsError.domain) \(nsError.code): \(nsError.localizedDescription)")
                 publishedServicesReady = false
                 isAdvertising = false
                 blockingIssue = publicationFailureMessage(service: service, error: nsError)
@@ -1494,7 +1494,7 @@ extension AgentMicroPeripheral: CBPeripheralManagerDelegate {
                 isAdvertising = false
                 blockingIssue = "Bluetooth advertising failed: \(nsError.localizedDescription)"
                 setMacConnection(.error, detail: "Bluetooth advertising failed")
-                log("advertising error: \(nsError.domain) \(nsError.code) — \(nsError.localizedDescription)")
+                log("advertising error: \(nsError.domain) \(nsError.code): \(nsError.localizedDescription)")
             } else {
                 isAdvertising = peripheral.isAdvertising
                 blockingIssue = nil
@@ -1551,7 +1551,7 @@ extension AgentMicroPeripheral: CBPeripheralManagerDelegate {
                     setMacConnection(.recovering, detail: "Mac helper disconnected; advertising again")
                     startAdvertising()
                 }
-                log("HID host \(central.identifier) unsubscribed\(hostConnected ? "" : " — disconnected")")
+                log("HID host \(central.identifier) unsubscribed\(hostConnected ? "" : ": disconnected")")
             }
         }
     }

@@ -294,7 +294,7 @@ final class T3DirectController {
         if snapshot.phase != lastLoggedPhase {
             lastLoggedPhase = snapshot.phase
             let issueText = snapshot.issue?.message
-            let detail = issueText != nil ? " — \(issueText!)" : ""
+            let detail = issueText != nil ? ": \(issueText!)" : ""
             onLog?("T3 \(snapshot.phase.rawValue)\(detail)")
         }
         maybeBootstrapPins(snapshot)

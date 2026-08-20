@@ -86,6 +86,12 @@ The menu reports the whole route, not just whether Bluetooth happens to be on:
 | **Failed** | An operation or route check failed and the menu provides a recovery action. |
 | **Idle** | The bridge is paused or waiting for ChatGPT or the iPhone. |
 
+When a future ChatGPT bundle no longer matches the fail-closed patch rules,
+AgentMicro leaves it untouched and shows **Copy agent repair prompt** in the
+menu-bar panel. The copied request includes the detected build and the complete
+[ChatGPT compatibility workflow](docs/CHATGPT-COMPATIBILITY.md) for a coding
+agent to repair and verify support safely.
+
 Patch and Restore stay visible whenever the complete route is not green. Both
 operations ask for confirmation, show their real stage and progress, ask
 ChatGPT to close normally, and never force-quit it.

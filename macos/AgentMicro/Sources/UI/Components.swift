@@ -226,3 +226,22 @@ struct PatchActionButtons: View {
         }
     }
 }
+
+struct AgentRepairPromptButton: View {
+    @ObservedObject var model: AppModel
+
+    var body: some View {
+        ActionButton(
+            title: model.agentRepairPromptCopied
+                ? "Copied"
+                : "Copy agent repair prompt",
+            systemImage: model.agentRepairPromptCopied
+                ? "checkmark"
+                : "doc.on.doc",
+            help: "Copy the detected ChatGPT build, failure reason, repository, documentation, and required test procedure.",
+            isDisabled: model.isBusy || !model.canCopyAgentRepairPrompt
+        ) {
+            model.copyAgentRepairPrompt()
+        }
+    }
+}

@@ -127,15 +127,20 @@ struct MenuPopoverView: View {
                     .accessibilityLabel("How to fix: \(model.patchBlockedReason)")
             }
 
-            // Keep both recovery operations visible anywhere short of a fully
-            // verified route. Their individual disabled states communicate
-            // which operation is safe for the detected ChatGPT installation.
-            PatchActionButtons(
-                model: model,
-                compact: true,
-                onDialogPresented: onDialogPresented,
-                onDialogDismissed: onDialogDismissed
-            )
+            if model.canCopyAgentRepairPrompt {
+                AgentRepairPromptButton(model: model)
+            }
+
+            // Once the scanner has rejected a pristine build, the repair
+            // prompt is the action. Avoid surrounding it with two dead buttons.
+            if !model.hasNoPatchAction {
+                PatchActionButtons(
+                    model: model,
+                    compact: true,
+                    onDialogPresented: onDialogPresented,
+                    onDialogDismissed: onDialogDismissed
+                )
+            }
         }
         .padding(12)
         .background(
@@ -183,12 +188,16 @@ struct MenuPopoverView: View {
     }
 
     private var integrationActionTitle: String {
+        if model.canCopyAgentRepairPrompt { return "Unsupported ChatGPT build" }
         if model.integrationNeedsUpdate { return "Update the ChatGPT integration" }
         if model.isChatGPTPatched { return "ChatGPT integration ready" }
         return "Enable ChatGPT integration"
     }
 
     private var integrationActionDetail: String {
+        if model.canCopyAgentRepairPrompt {
+            return "AgentMicro stopped safely before changing ChatGPT. Copy a complete repair request for your coding agent."
+        }
         if model.integrationNeedsUpdate {
             return "Restore ChatGPT first, then choose Patch ChatGPT. This is normally needed only after ChatGPT or AgentMicro updates."
         }

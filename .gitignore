@@ -27,3 +27,6 @@ tools/AgentMicroVHid/vhid2
 
 # Distribution output
 dist/
+
+# Private release checklist. Keep local observations out of the public repo.
+TEST.md

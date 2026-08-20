@@ -261,6 +261,9 @@ private struct IntegrationSettingsTab: View {
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityLabel("How to fix: \(model.patchBlockedReason)")
+                        if model.canCopyAgentRepairPrompt {
+                            AgentRepairPromptButton(model: model)
+                        }
                     } else {
                         PatchActionButtons(model: model, compact: true)
                     }
