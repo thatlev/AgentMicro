@@ -1,0 +1,56 @@
+name: AgentMicro
+
+options:
+  createIntermediateGroups: true
+  deploymentTarget:
+    macOS: "14.0"
+
+settings:
+  base:
+    ARCHS: arm64
+    ONLY_ACTIVE_ARCH: NO
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    SWIFT_VERSION: "5.0"
+    SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) CODEX_MICRO_MENU_APP"
+    ENABLE_APP_SANDBOX: NO
+    ENABLE_HARDENED_RUNTIME: YES
+    CODE_SIGN_STYLE: Manual
+    GENERATE_INFOPLIST_FILE: NO
+
+targets:
+  AgentMicro:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: Sources
+      - path: ../../tools/AgentMicroBridge/main.swift
+      - path: ../../tools/AgentMicroBridge/T3Backend.swift
+      - path: Support/Assets.xcassets
+        buildPhase: resources
+      - path: Support/PatchRuntime
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.thislev.codexmicro
+        PRODUCT_NAME: AgentMicro
+        EXECUTABLE_NAME: AgentMicro
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        INFOPLIST_FILE: Support/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Support/AgentMicro.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/../Frameworks"
+
+schemes:
+  AgentMicro:
+    build:
+      targets:
+        AgentMicro: all
+    run:
+      config: Debug
+    archive:
+      config: Release

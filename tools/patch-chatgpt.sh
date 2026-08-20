@@ -30,9 +30,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 APP="${CHATGPT_APP:-/Applications/ChatGPT.app}"
 RUNTIME_ROOT="${CODEX_MICRO_PATCH_RUNTIME:-$SCRIPT_DIR}"
-BACKUP_ROOT="${CODEX_MICRO_BACKUP_ROOT:-$HOME/Library/Application Support/CodexMicro/Backups}"
+BACKUP_ROOT="${CODEX_MICRO_BACKUP_ROOT:-$HOME/Library/Application Support/AgentMicro/Backups}"
 LEGACY_BACKUP_ROOT="${CODEX_MICRO_LEGACY_BACKUP_ROOT:-$HOME/.codexbridge/backup}"
-STATE_ROOT="${CODEX_MICRO_STATE_ROOT:-$HOME/Library/Application Support/CodexMicro}"
+STATE_ROOT="${CODEX_MICRO_STATE_ROOT:-$HOME/Library/Application Support/AgentMicro}"
 DEVELOPER_FALLBACK="${CODEX_MICRO_DEVELOPER_FALLBACK:-}"
 OPENAI_TEAM_IDENTIFIER="2DC432GLL2"
 PATCH_SCHEMA=2
@@ -154,12 +154,12 @@ NODE_BIN="$(first_executable \
 INSPECTOR="$(first_file \
     "${CODEX_MICRO_INSPECTOR:-}" \
     "$RUNTIME_ROOT/asar-inspect.cjs" \
-    "$REPO_ROOT/macos/CodexMicro/PatchRuntime/asar-inspect.cjs" || true)"
+    "$REPO_ROOT/macos/AgentMicro/PatchRuntime/asar-inspect.cjs" || true)"
 
 SHIM_SRC="$(first_file \
     "${CODEX_MICRO_SHIM:-}" \
     "$RUNTIME_ROOT/codex-hid-shim.js" \
-    "$REPO_ROOT/tools/CodexMicroBridge/codex-hid-shim.js" || true)"
+    "$REPO_ROOT/tools/AgentMicroBridge/codex-hid-shim.js" || true)"
 
 ASAR_JS="$(first_file \
     "${CODEX_MICRO_ASAR_JS:-}" \
@@ -728,9 +728,9 @@ swap_in_staged_app() {
     local failed
     parent="$(dirname "$APP")"
     name="$(basename "$APP")"
-    incoming="$parent/.${name}.codex-micro-incoming-$$"
-    previous="$parent/.${name}.codex-micro-previous-$$"
-    failed="$parent/.${name}.codex-micro-failed-$$"
+    incoming="$parent/.${name}.agent-micro-incoming-$$"
+    previous="$parent/.${name}.agent-micro-previous-$$"
+    failed="$parent/.${name}.agent-micro-failed-$$"
 
     if ! /usr/bin/ditto --rsrc --extattr --acl "$source_app" "$incoming"; then
         rm -rf "$incoming" 2>/dev/null || true
@@ -807,7 +807,7 @@ if [ "$MODE" = "restore" ]; then
                 "Fully validating the exact pristine resource backup…" 0.1
             validate_legacy_backup_full
 
-            WORK="$(mktemp -d "${TMPDIR:-/tmp}/codex-micro-legacy-restore.XXXXXX")"
+            WORK="$(mktemp -d "${TMPDIR:-/tmp}/agent-micro-legacy-restore.XXXXXX")"
             STAGED_APP="$WORK/ChatGPT.app"
             ORIGINAL_ASAR_HASH="$(/usr/bin/shasum -a 256 "$ASAR_PATH" | awk '{print $1}')"
             ORIGINAL_INFO_HASH="$(/usr/bin/shasum -a 256 "$APP_INFO" | awk '{print $1}')"
@@ -893,7 +893,7 @@ else
 fi
 ensure_pristine_backup
 
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/codex-micro-patch.XXXXXX")"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/agent-micro-patch.XXXXXX")"
 EXTRACTED="$WORK/extracted"
 STAGED_APP="$WORK/ChatGPT.app"
 ORIGINAL_ASAR_HASH="$(/usr/bin/shasum -a 256 "$ASAR_PATH" | awk '{print $1}')"
@@ -1051,11 +1051,11 @@ cp -pR "$WORK/app.asar.unpacked" "$STAGED_RESOURCES/app.asar.unpacked"
 /usr/libexec/PlistBuddy -c "Set :ElectronAsarIntegrity:Resources/app.asar:hash $NEW_HASH" \
     "$STAGED_APP/Contents/Info.plist" \
     || die "staging" "ElectronAsarIntegrity could not be updated."
-/usr/libexec/PlistBuddy -c "Delete :CodexMicroPatch" "$STAGED_APP/Contents/Info.plist" 2>/dev/null || true
-/usr/libexec/PlistBuddy -c "Add :CodexMicroPatch dict" "$STAGED_APP/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Add :CodexMicroPatch:Schema integer $PATCH_SCHEMA" "$STAGED_APP/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Add :CodexMicroPatch:SourceVersion string $VERSION" "$STAGED_APP/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Add :CodexMicroPatch:SourceBuild string $BUILD" "$STAGED_APP/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Delete :AgentMicroPatch" "$STAGED_APP/Contents/Info.plist" 2>/dev/null || true
+/usr/libexec/PlistBuddy -c "Add :AgentMicroPatch dict" "$STAGED_APP/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :AgentMicroPatch:Schema integer $PATCH_SCHEMA" "$STAGED_APP/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :AgentMicroPatch:SourceVersion string $VERSION" "$STAGED_APP/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :AgentMicroPatch:SourceBuild string $BUILD" "$STAGED_APP/Contents/Info.plist"
 
 /usr/bin/codesign -d --entitlements :- "$APP" > "$WORK/entitlements.plist" 2>/dev/null \
     || die "signing" "The original ChatGPT entitlements could not be read."

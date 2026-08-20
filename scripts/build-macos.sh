@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-MACOS_ROOT="$REPO_ROOT/macos/CodexMicro"
+MACOS_ROOT="$REPO_ROOT/macos/AgentMicro"
 DIST_ROOT="$REPO_ROOT/dist"
 BUILD_ROOT="$DIST_ROOT/.build"
 GENERATED_PROJECT_ROOT="$BUILD_ROOT/GeneratedProject"
@@ -19,7 +19,7 @@ NODE_ARCHIVE_SHA256="e1a97e14c99c803e96c7339403282ea05a499c32f8d83defe9ef5ec66f9
 NODE_DISTRIBUTION="node-v${NODE_VERSION}-darwin-arm64"
 NODE_ARCHIVE_NAME="${NODE_DISTRIBUTION}.tar.gz"
 NODE_BASE_URL="https://nodejs.org/dist/v${NODE_VERSION}"
-CACHE_ROOT="${CODEX_MICRO_BUILD_CACHE:-$HOME/Library/Caches/CodexMicroBuild}"
+CACHE_ROOT="${CODEX_MICRO_BUILD_CACHE:-$HOME/Library/Caches/AgentMicroBuild}"
 NODE_CACHE_ROOT="$CACHE_ROOT/node/v${NODE_VERSION}"
 NPM_CACHE_ROOT="$CACHE_ROOT/npm"
 SIGN_IDENTITY="${MACOS_SIGN_IDENTITY:--}"
@@ -82,7 +82,7 @@ prepare_patch_runtime() {
 
     install -m 0755 "$REPO_ROOT/tools/patch-chatgpt.sh" "$RUNTIME_ROOT/patch-chatgpt.sh"
     install -m 0644 \
-        "$REPO_ROOT/tools/CodexMicroBridge/codex-hid-shim.js" \
+        "$REPO_ROOT/tools/AgentMicroBridge/codex-hid-shim.js" \
         "$RUNTIME_ROOT/codex-hid-shim.js"
     install -m 0644 \
         "$MACOS_ROOT/PatchRuntime/asar-inspect.cjs" \
@@ -121,7 +121,7 @@ prepare_patch_runtime() {
 sign_application() {
     local app="$1"
     local node="$app/Contents/Resources/PatchRuntime/node"
-    local entitlements="$MACOS_ROOT/Support/CodexMicro.entitlements"
+    local entitlements="$MACOS_ROOT/Support/AgentMicro.entitlements"
     local node_entitlements="$MACOS_ROOT/Support/NodeRuntime.entitlements"
 
     if [[ "$SIGN_IDENTITY" == "-" ]]; then
@@ -169,7 +169,7 @@ require_command curl
 require_command shasum
 require_command codesign
 
-TEMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/codexmicro-build.XXXXXX")"
+TEMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/agentmicro-build.XXXXXX")"
 trap cleanup EXIT
 
 # DIST_ROOT is fixed under the repository so this clean cannot expand to an
@@ -195,8 +195,8 @@ xcodegen generate \
 
 log "building AgentMicro for macOS 14+ on Apple Silicon"
 xcodebuild \
-    -project "$GENERATED_PROJECT_ROOT/CodexMicro.xcodeproj" \
-    -scheme CodexMicro \
+    -project "$GENERATED_PROJECT_ROOT/AgentMicro.xcodeproj" \
+    -scheme AgentMicro \
     -configuration Release \
     -destination "platform=macOS,arch=arm64" \
     -derivedDataPath "$DERIVED_DATA_ROOT" \
@@ -204,7 +204,7 @@ xcodebuild \
     ONLY_ACTIVE_ARCH=NO \
     CODE_SIGNING_ALLOWED=NO \
     INFOPLIST_FILE="$MACOS_ROOT/Support/Info.plist" \
-    CODE_SIGN_ENTITLEMENTS="$MACOS_ROOT/Support/CodexMicro.entitlements" \
+    CODE_SIGN_ENTITLEMENTS="$MACOS_ROOT/Support/AgentMicro.entitlements" \
     CONFIGURATION_BUILD_DIR="$PRODUCTS_ROOT" \
     build
 

@@ -57,7 +57,7 @@ log "preparing a readable installer volume"
 ditto "$APP_PATH" "$STAGING_ROOT/AgentMicro.app"
 ln -s /Applications "$STAGING_ROOT/Applications"
 install -m 0644 \
-    "$REPO_ROOT/macos/CodexMicro/Support/DMG-README.txt" \
+    "$REPO_ROOT/macos/AgentMicro/Support/DMG-README.txt" \
     "$STAGING_ROOT/Read Me.txt"
 
 rm -f "$DMG_PATH"

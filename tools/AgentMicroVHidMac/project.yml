@@ -1,0 +1,25 @@
+name: AgentMicroVHidMac
+options:
+  bundleIdPrefix: io.github.thislev
+  deploymentTarget:
+    macOS: "14.0"
+targets:
+  AgentMicroVHidMac:
+    type: application
+    platform: macOS
+    sources: [../AgentMicroVHid]
+    excludedSources: ["../AgentMicroVHid/vhid*", "../AgentMicroVHid/*.log", "../AgentMicroVHid/*.plist"]
+    info:
+      path: Support/InfoMac.plist
+      properties:
+        CFBundleDisplayName: AgentMicroVHidMac
+        LSUIElement: YES
+    entitlements:
+      path: Support/entitlements.mac.plist
+      properties:
+        com.apple.developer.hid.virtual.device: YES
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: io.github.thislev.codexmicrovhidmac
+      DEVELOPMENT_TEAM: Q6TQ7WFCK5
+      CODE_SIGN_STYLE: Automatic
+      CODE_SIGN_ENTITLEMENTS: Support/entitlements.mac.plist

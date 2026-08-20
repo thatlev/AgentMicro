@@ -1,0 +1,10 @@
+{
+  "name": "agent-micro-patch-runtime",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Locked build-time dependencies bundled with the AgentMicro macOS app.",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@electron/asar": "4.2.1"
+  }
+}

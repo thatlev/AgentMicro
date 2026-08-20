@@ -4,8 +4,8 @@ AgentMicro turns an iPhone into a Bluetooth control surface. This checkout
 contains two Mac connection paths:
 
 Existing bundle IDs, storage directories, socket names, and protocol identifiers
-retain their `CodexMicro` values so installed builds upgrade in place and remain
-compatible with ChatGPT's physical Codex Micro protocol.
+retain their `AgentMicro` values so installed builds upgrade in place and remain
+compatible with ChatGPT's physical AgentMicro protocol.
 
 - **T3 Code direct:** T3 Code connects straight to the iPhone's private BLE
   service. The current iPhone UI is intentionally T3-only.
@@ -29,7 +29,7 @@ ChatGPT companion:
 
 ```text
 ChatGPT integration
-        ⟷ $TMPDIR/CodexMicro/codexbridge.sock
+        ⟷ $TMPDIR/AgentMicro/codexbridge.sock
         ⟷ AgentMicro menu-bar app
         ⟷ encrypted private BLE
         ⟷ AgentMicro on iPhone
@@ -44,7 +44,7 @@ patches use the private per-user socket.
 Requirements:
 
 - Xcode with an Apple ID signed in under **Xcode → Settings → Accounts**
-- a development team selected for the `CodexMicroRemote` target
+- a development team selected for the `AgentMicroRemote` target
 - `iPhone L` unlocked, trusted, in Developer Mode, and connected by USB or
   available over the same trusted developer Wi-Fi network
 
@@ -99,7 +99,7 @@ dist/AgentMicro-1.0.0-arm64.dmg
 
 The default build is ad-hoc signed for local testing on this Mac. Public DMG
 distribution requires Developer ID signing, notarization, and stapling. See
-[macos/CodexMicro/README.md](macos/CodexMicro/README.md).
+[macos/AgentMicro/README.md](macos/AgentMicro/README.md).
 
 ## Test the menu-bar companion
 
@@ -152,8 +152,8 @@ to close normally and aborts if it does not; it never force-quits ChatGPT.
 The command-line bridge remains available for protocol tests:
 
 ```bash
-./tools/CodexMicroBridge/codexbridge
-./tools/CodexMicroBridge/codexbridge --emulate
+./tools/AgentMicroBridge/codexbridge
+./tools/AgentMicroBridge/codexbridge --emulate
 ```
 
 Run only one menu app, command-line bridge, direct T3 Code connection, or

@@ -20,10 +20,10 @@ node_modules/
 
 # Local logs and generated binaries
 *.log
-tools/CodexMicroBridge/codexbridge
-tools/CodexMicroEmu/codexmicroemu
-tools/CodexMicroVHid/vhid
-tools/CodexMicroVHid/vhid2
+tools/AgentMicroBridge/codexbridge
+tools/AgentMicroEmu/agentmicroemu
+tools/AgentMicroVHid/vhid
+tools/AgentMicroVHid/vhid2
 
 # Distribution output
 dist/

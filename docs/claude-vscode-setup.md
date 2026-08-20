@@ -29,24 +29,24 @@ iPhone (BLE) ─▶ codexbridge (auto) ─▶ $TMPDIR/codexbridge-vscode.sock �
 
 1. **Companion extension** (drives the editor):
    ```bash
-   code --install-extension "vscode/CodexMicroVSCode/codex-micro-vscode-0.5.1.vsix" --force
+   code --install-extension "vscode/AgentMicroVSCode/agent-micro-vscode-0.5.1.vsix" --force
    ```
    Then run **Developer: Reload Window**. Confirm with the palette command
    **AgentMicro: Show bridge status** — it should say it is listening.
 
 2. **Build the bridge helper** (once, or after editing it):
    ```bash
-   swiftc -O tools/CodexMicroBridge/main.swift tools/CodexMicroBridge/T3Backend.swift -o tools/CodexMicroBridge/codexbridge
+   swiftc -O tools/AgentMicroBridge/main.swift tools/AgentMicroBridge/T3Backend.swift -o tools/AgentMicroBridge/codexbridge
    ```
 
 3. **iPhone app** — already built and installed on iPhone L
    (`io.github.thislev.codexmicroremote`). To rebuild:
    ```bash
-   cd ios/CodexMicroRemote && xcodegen generate
-   xcodebuild -scheme CodexMicroRemote -configuration Debug \
+   cd ios/AgentMicroRemote && xcodegen generate
+   xcodebuild -scheme AgentMicroRemote -configuration Debug \
      -destination 'id=00008150-000A1C860CDA401C' -allowProvisioningUpdates build
    xcrun devicectl device install app --device iPhone-L.coredevice.local \
-     "$(xcodebuild -scheme CodexMicroRemote -showBuildSettings | awk '/BUILT_PRODUCTS_DIR/{d=$3}/FULL_PRODUCT_NAME/{n=$3}END{print d"/"n}')"
+     "$(xcodebuild -scheme AgentMicroRemote -showBuildSettings | awk '/BUILT_PRODUCTS_DIR/{d=$3}/FULL_PRODUCT_NAME/{n=$3}END{print d"/"n}')"
    ```
 
 ## Run it
@@ -55,18 +55,18 @@ iPhone (BLE) ─▶ codexbridge (auto) ─▶ $TMPDIR/codexbridge-vscode.sock �
    Codex/Kimi terminals). Keep that window frontmost.
 2. Start the bridge in its default auto mode:
    ```bash
-   ./tools/CodexMicroBridge/codexbridge
+   ./tools/AgentMicroBridge/codexbridge
    ```
    Auto mode follows the page selected on the iPhone: the first page keeps the
    existing ChatGPT/Codex behavior; the second routes to VS Code. `--target
    vscode` is still available for a fixed VS Code-only helper.
-3. Open **CodexMicroRemote** on iPhone L (keep it foreground) — or, with no
+3. Open **AgentMicroRemote** on iPhone L (keep it foreground) — or, with no
    phone, add `--emulate` and type events at the terminal.
 
 ### No-phone quick test
 
 ```bash
-./tools/CodexMicroBridge/codexbridge --target vscode --emulate
+./tools/AgentMicroBridge/codexbridge --target vscode --emulate
 # then type:  ag0    (focus the target pinned to agent key 1)
 #             approve / reject / send / fork
 ```

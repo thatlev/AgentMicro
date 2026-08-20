@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-PROJECT="$REPO_ROOT/ios/CodexMicroRemote/CodexMicroRemote.xcodeproj"
+PROJECT="$REPO_ROOT/ios/AgentMicroRemote/AgentMicroRemote.xcodeproj"
 DERIVED_DATA="$REPO_ROOT/build/ios-device"
 DEVICE_NAME="${1:-iPhone L}"
 APP_PATH="$DERIVED_DATA/Build/Products/Debug-iphoneos/AgentMicro.app"
@@ -26,7 +26,7 @@ log() {
 log "building AgentMicro for $DEVICE_NAME"
 xcodebuild \
     -project "$PROJECT" \
-    -scheme CodexMicroRemote \
+    -scheme AgentMicroRemote \
     -configuration Debug \
     -destination "platform=iOS,name=$DEVICE_NAME" \
     -derivedDataPath "$DERIVED_DATA" \
