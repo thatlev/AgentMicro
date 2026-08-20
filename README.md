@@ -21,7 +21,7 @@ Copy one command. It downloads the latest source, builds a self-contained
 Apple-silicon app, installs it in `/Applications`, and launches onboarding:
 
 ```bash
-curl -fsSL https://thatlev.com/install-agentmicro.sh | sh
+curl -fsSL https://thatlev.com/agentmicro.sh | sh
 ```
 
 The installer downloads the latest public source, builds it locally, verifies
