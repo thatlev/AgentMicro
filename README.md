@@ -1,160 +1,154 @@
+<div align="center">
+
 # AgentMicro
 
-AgentMicro turns an iPhone into a Bluetooth control surface. This checkout
-contains two Mac connection paths:
+### Turn your iPhone into a control surface for coding agents.
 
-Existing bundle IDs, storage directories, socket names, and protocol identifiers
-retain their `AgentMicro` values so installed builds upgrade in place and remain
-compatible with ChatGPT's physical AgentMicro protocol.
+[![macOS 14+](https://img.shields.io/badge/macOS-14%2B-111111?logo=apple&logoColor=white)](https://github.com/thatlev/AgentMicro)
+[![Apple silicon](https://img.shields.io/badge/Apple_silicon-arm64-111111)](https://github.com/thatlev/AgentMicro)
+[![ChatGPT tested](https://img.shields.io/badge/ChatGPT-26.814.41407-10A37F?logo=openai&logoColor=white)](https://github.com/thatlev/AgentMicro)
+[![BUSL 1.1](https://img.shields.io/badge/license-BUSL_1.1-3564FF)](LICENSE)
 
-- **T3 Code direct:** T3 Code connects straight to the iPhone's private BLE
-  service. The current iPhone UI is intentionally T3-only.
-- **ChatGPT companion:** the native AgentMicro menu-bar app owns Bluetooth,
-  a reversible ChatGPT integration, launch at login, diagnostics, and strict
-  end-to-end connection status.
+[Install](#install-the-mac-app) · [iPhone setup](#put-agentmicro-on-your-iphone) · [Agent apps](#choose-your-agent-app) · [How it works](#how-it-works) · [License](#license)
 
-Only one Mac process can own the iPhone's BLE connection at a time. Pause or
-quit the menu-bar bridge before testing direct T3 Code, and disconnect T3 Code
-before testing the menu-bar bridge.
+</div>
 
-## Architecture
+![AgentMicro controlling coding agents from an iPhone](docs/agentmicro-demo.gif)
 
-Direct T3 Code:
+## Install the Mac app
 
-```text
-AgentMicro on iPhone ⟷ encrypted private BLE ⟷ T3 Code for macOS
+Copy one command. It downloads the latest source, builds a self-contained
+Apple-silicon app, installs it in `/Applications`, and launches onboarding:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/thatlev/AgentMicro/main/scripts/install-macos.sh | bash
 ```
 
-ChatGPT companion:
+The installer is readable at
+[`scripts/install-macos.sh`](scripts/install-macos.sh). It requires macOS 14+,
+full Xcode, and Homebrew when XcodeGen or Node are not already installed. The
+local build is ad-hoc signed; public distribution still requires Developer ID
+signing and notarization.
+
+AgentMicro opens as a menu-bar app. First run guides you through the real setup:
+
+1. Patch ChatGPT with one explicit, reversible action. It usually takes less
+   than a minute and shows live progress.
+2. Copy the iPhone setup prompt into ChatGPT, Claude, Cursor, Codex, or another
+   coding agent.
+3. Open AgentMicro on the phone and wait for the Mac to report **iPhone Ready**.
+4. Choose T3 Code or OpenCodex for the agent workflow you want.
+
+## Put AgentMicro on your iPhone
+
+The iPhone app is source-only. Apple requires each local device build to use a
+development team from the user's own Xcode account.
+
+- [Browse the iPhone source](ios/AgentMicroRemote)
+- [Follow the complete mobile setup and troubleshooting guide](docs/MOBILE-SETUP.md)
+
+With signing already selected in Xcode:
+
+```bash
+./scripts/deploy-iphone.sh "YOUR IPHONE NAME"
+```
+
+A free Apple ID works for on-device development. Those builds normally expire
+after seven days; run the same command again when iOS says the app is no longer
+available. A paid Apple Developer account is required for TestFlight and normal
+distribution.
+
+## Choose your agent app
+
+[![T3 Code fork](https://img.shields.io/badge/T3_Code-AgentMicro_fork-111111?logo=github)](https://github.com/thatlev/t3code)
+[![OpenCodex](https://img.shields.io/badge/OpenCodex-agent_workflows-3564FF?logo=github)](https://github.com/lidge-jun/opencodex)
+
+**T3 Code** is the complete desktop workspace for controlling multiple coding
+agents directly with AgentMicro. **OpenCodex** is the lighter integration path
+for workflows that begin in ChatGPT, Codex, Claude Code, or Cursor.
+
+Only one Mac process can own the iPhone Bluetooth connection at a time. Pause
+the AgentMicro menu companion before testing a direct T3 Code connection, and
+disconnect T3 Code before returning to the ChatGPT companion.
+
+## What the menu means
+
+The menu reports the whole route, not just whether Bluetooth happens to be on:
+
+| State | Meaning |
+|---|---|
+| **Connected** | A compatible ChatGPT patch and a recent ChatGPT → Mac → iPhone → Mac → ChatGPT round trip were verified. |
+| **Connecting** | Discovery, Bluetooth pairing, or end-to-end verification is in progress. |
+| **Action needed** | A permission, patch, restore, or supported-app update needs the user. |
+| **Failed** | An operation or route check failed and the menu provides a recovery action. |
+| **Idle** | The bridge is paused or waiting for ChatGPT or the iPhone. |
+
+Patch and Restore stay visible whenever the complete route is not green. Both
+operations ask for confirmation, show their real stage and progress, ask
+ChatGPT to close normally, and never force-quit it.
+
+## How it works
+
+### ChatGPT companion
 
 ```text
 ChatGPT integration
-        ⟷ $TMPDIR/AgentMicro/codexbridge.sock
-        ⟷ AgentMicro menu-bar app
-        ⟷ encrypted private BLE
+        ⟷ private per-user Unix socket
+        ⟷ AgentMicro menu-bar companion
+        ⟷ encrypted private Bluetooth service
         ⟷ AgentMicro on iPhone
 ```
 
-The companion temporarily provides `/tmp/codexbridge.sock` as a migration
-alias for ChatGPT installations patched by the older invisible helper. New
-patches use the private per-user socket.
+### T3 Code direct
 
-## Build and launch the iPhone app
-
-Requirements:
-
-- Xcode with an Apple ID signed in under **Xcode → Settings → Accounts**
-- a development team selected for the `AgentMicroRemote` target
-- `iPhone L` unlocked, trusted, in Developer Mode, and connected by USB or
-  available over the same trusted developer Wi-Fi network
-
-From this repository:
-
-```bash
-./scripts/deploy-iphone.sh "iPhone L"
+```text
+AgentMicro on iPhone ⟷ encrypted private Bluetooth service ⟷ T3 Code for macOS
 ```
 
-The script builds, installs, and launches bundle
-`io.github.thislev.codexmicroremote`. A free Apple ID is sufficient for
-on-device development testing; a paid account is needed for TestFlight and
-normal distribution.
+Existing bundle IDs, storage keys, and wire identifiers remain stable so old
+builds upgrade in place and ChatGPT can still discover the virtual control
+surface. The public product name, app names, source targets, and UI are
+AgentMicro.
 
-## Run and test the BLE-enabled T3 Code source
+## Build from source
 
-Close other packaged T3 Code copies first, then from the T3 Code checkout:
-
-```bash
-pnpm dev:desktop
-```
-
-Test direct T3 control:
-
-1. Pause or quit the AgentMicro menu-bar bridge.
-2. Keep AgentMicro open on the iPhone.
-3. In T3 Code, open **Settings → AgentMicro → Connect iPhone**.
-4. Select **AgentMicro** and accept the Bluetooth pairing prompts.
-5. Confirm T3 reports **Connected** and shows the iPhone battery.
-6. Test all six thread keys, pin/unpin, NEW, joystick navigation, encoder
-   model/effort changes, approve, decline, send, and dictation.
-7. Relaunch T3 and confirm automatic reconnection.
-8. Turn Bluetooth off briefly. Both sides must stop claiming a usable
-   connection, then recover after Bluetooth is restored.
-
-## Build the macOS menu-bar companion
-
-On Apple Silicon with Xcode, XcodeGen, npm, and Internet access for the first
-build:
+Requirements: Apple-silicon Mac, macOS 14+, Xcode, XcodeGen, npm, and Internet
+access for the first pinned-runtime download.
 
 ```bash
 ./scripts/build-macos.sh
+```
+
+The result is `dist/AgentMicro.app`. The build bundles its own integrity-locked
+Node/ASAR patch runtime, so end users do not need Node or npm when patching or
+restoring ChatGPT.
+
+For a local DMG:
+
+```bash
 ./scripts/package-dmg.sh --skip-build
 ```
 
-Outputs:
+Developer ID signing and notarization instructions are in the
+[macOS build guide](macos/AgentMicro/README.md).
 
-```text
-dist/AgentMicro.app
-dist/AgentMicro-1.0.0-arm64.dmg
-```
-
-The default build is ad-hoc signed for local testing on this Mac. Public DMG
-distribution requires Developer ID signing, notarization, and stapling. See
-[macos/AgentMicro/README.md](macos/AgentMicro/README.md).
-
-## Test the menu-bar companion
-
-1. Disconnect direct T3 Code so the menu app can own Bluetooth.
-2. Copy **AgentMicro.app** to `/Applications` and open it.
-3. Keep the iPhone app open and click **Reconnect** in the menu.
-4. If Integration says **Update required**, choose **Restore ChatGPT**, wait
-   for it to reopen, then choose **Patch ChatGPT**. If it says
-   **Patch required**, patch directly.
-5. Open ChatGPT and watch the route progress through its actual stages.
-6. Confirm the attention dot disappears only after a recent matched
-   ChatGPT → Mac → iPhone → Mac → ChatGPT round trip.
-7. Close ChatGPT, disable Bluetooth, or close the iPhone app one at a time.
-   Each break must remove the healthy state.
-
-The current phone UI exposes only the T3 surface. The companion can still
-verify its transport and ChatGPT round trip, but button presses remain routed
-to T3 in this iPhone build.
-
-## Menu-bar status is the source of truth for the ChatGPT route
-
-- **No dot / Verified:** compatible patch, encrypted phone link, active
-  ChatGPT socket, and a recent successful two-way round trip.
-- **Yellow / Connecting:** discovery, Bluetooth connection, or end-to-end
-  verification is in progress.
-- **Orange / Action needed:** permission, patch, update, or another user
-  action is required.
-- **Red / Failed:** an operation or route check failed.
-- **Gray / Idle:** paused, not found, or waiting for a required app.
-
-Green is deliberately temporary. The companion rechecks the route and removes
-the healthy state when its proof becomes stale.
-
-## Clean reconnect
-
-1. Stop any other T3 or command-line process using the AgentMicro BLE device.
-2. Open AgentMicro on the iPhone.
-3. Open the AgentMicro menu and choose **Reconnect**.
-4. Open ChatGPT.
-5. Resolve **Update required** with **Restore → Patch**, or resolve
-   **Patch required** with **Patch**.
-6. Wait for **Verified**. Do not treat a Bluetooth-only link as fully
-   connected.
-
-Patch and restore are explicit, confirmed operations. AgentMicro asks ChatGPT
-to close normally and aborts if it does not; it never force-quits ChatGPT.
-
-## Development bridge
-
-The command-line bridge remains available for protocol tests:
+## Verify a change
 
 ```bash
-./tools/AgentMicroBridge/codexbridge
-./tools/AgentMicroBridge/codexbridge --emulate
+node tools/wire-contract.test.cjs
+node --test macos/AgentMicro/PatchRuntime/asar-inspect.test.cjs
+./scripts/build-macos.sh
 ```
 
-Run only one menu app, command-line bridge, direct T3 Code connection, or
-emulator at a time.
+The wire-contract test exists because several identifiers are external
+contracts even though they are not user-facing names. Renaming one casually can
+make a healthy phone and a patched ChatGPT wait for each other forever.
+
+## License
+
+AgentMicro is source-available under the [Business Source License 1.1](LICENSE).
+Read, build, modify, and evaluate the project under those terms; the Additional
+Use Grant in the license controls production use until the change date.
+
+AgentMicro is independent software and is not affiliated with or endorsed by
+Apple, OpenAI, Anthropic, Cursor, T3 Code, or OpenCodex.
