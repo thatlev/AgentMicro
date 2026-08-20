@@ -404,7 +404,11 @@ function createBridge() {
   const native = {
     // Returns raw interface descriptors; the app maps these to portPaths and
     // filters on usagePage === 0xFF00.
-    findAgentMicroInterfaces() {
+    //
+    // The name is ChatGPT's, not ours: its service calls
+    // `findCodexMicroInterfaces()` on this object. Renaming it makes discovery
+    // throw, which the UI reports as "couldn't check for your device".
+    findCodexMicroInterfaces() {
       return present
         ? [{ path: FAKE_PATH, usagePage: USAGE_PAGE, release: 0, vendorId: VID, productId: PID }]
         : [];

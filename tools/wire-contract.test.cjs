@@ -31,6 +31,15 @@ assert.match(
   'the virtual HID product string must stay "Codex Micro"'
 );
 
+// The function ChatGPT's service calls on the native watcher replacement.
+// Renaming it makes discovery throw and the UI reports "couldn't check for
+// your device" while the patch itself still looks installed.
+assert.match(
+  shim,
+  /findCodexMicroInterfaces\(\) \{/,
+  'the native discovery entry point must stay findCodexMicroInterfaces'
+);
+
 // The device path the shim reports for that virtual device.
 assert.match(
   shim,
@@ -84,4 +93,4 @@ for (const identifier of [
   assert.ok(found, `${identifier} must not be renamed`);
 }
 
-process.stdout.write('wire-contract tests: PASS (11 cross-process identifiers)\n');
+process.stdout.write('wire-contract tests: PASS (12 cross-process identifiers)\n');
