@@ -11,7 +11,6 @@ struct OnboardingView: View {
     @State private var copyFeedbackGeneration = 0
     @State private var openedX = false
     @State private var openedGitHub = false
-    @State private var confirmingPatch = false
 
     private enum Step: Int, CaseIterable {
         case welcome
@@ -60,14 +59,6 @@ struct OnboardingView: View {
         .frame(minWidth: 680, idealWidth: 720, minHeight: 540, idealHeight: 580)
         .background(Color(nsColor: .windowBackgroundColor))
         .tint(.blue)
-        .alert("Patch ChatGPT?", isPresented: $confirmingPatch) {
-            Button("Cancel", role: .cancel) {}
-            Button("Patch & Reopen") {
-                model.patchChatGPT()
-            }
-        } message: {
-            Text("AgentMicro will close ChatGPT normally, update its local app resources, sign them locally, and reopen it. This usually takes less than a minute.")
-        }
     }
 
     private var stepNavigation: some View {
@@ -141,31 +132,33 @@ struct OnboardingView: View {
     private var chatGPTStep: some View {
         VStack(spacing: 24) {
             stepHeading(
-                icon: model.isChatGPTPatched ? "checkmark.seal.fill" : "wrench.and.screwdriver.fill",
+                icon: !model.isPatchStatusReady
+                    ? "magnifyingglass"
+                    : (model.isChatGPTPatched ? "checkmark.seal.fill" : "wrench.and.screwdriver.fill"),
                 tint: model.isChatGPTPatched ? .green : .blue,
-                title: model.isChatGPTPatched ? "ChatGPT is patched" : "Connect AgentMicro to ChatGPT",
-                detail: model.isChatGPTPatched
+                title: !model.isPatchStatusReady
+                    ? "Checking ChatGPT"
+                    : (model.isChatGPTPatched ? "ChatGPT is patched" : "Connect AgentMicro to ChatGPT"),
+                detail: !model.isPatchStatusReady
+                    ? "Reading the installed ChatGPT build before offering a safe action."
+                    : (model.isChatGPTPatched
                     ? "The integration is installed and ready for the iPhone route."
-                    : "AgentMicro makes one reversible local change. It normally finishes in under a minute."
+                    : "AgentMicro makes one reversible local change. It normally finishes in under a minute.")
             )
 
-            if model.isBusy {
+            if !model.isPatchStatusReady {
+                ProgressView()
+                    .controlSize(.regular)
+                    .accessibilityLabel("Checking the installed ChatGPT build")
+            } else if model.isBusy {
                 operationCard
             } else if model.isChatGPTPatched {
                 successRow("Patch complete", detail: "Continue to install the iPhone app.")
             } else {
                 VStack(spacing: 10) {
-                    Button {
-                        confirmingPatch = true
-                    } label: {
-                        Label("Patch ChatGPT", systemImage: "wrench.and.screwdriver")
-                            .frame(minWidth: 170)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(!model.canPatch)
+                    PatchActionButtons(model: model, compact: true)
 
-                    if !model.canPatch {
+                    if model.hasNoPatchAction {
                         Text(model.patchBlockedReason)
                             .font(.caption)
                             .foregroundStyle(.secondary)

@@ -179,7 +179,7 @@ try {
 
   const nodeHIDSource = readEntry(nodeHIDFiles[0]).toString('utf8');
   const nodeHIDState = nodeHIDSource.includes(
-    'node-hid replacement - installed by patch-chatgpt.sh'
+    'node-hid replacement — installed by patch-chatgpt.sh'
   )
     ? 'patched'
     : nodeHIDSource.includes("require('./build/Release/HID.node')")

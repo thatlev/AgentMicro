@@ -18,6 +18,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     private var spaceChangeObserver: NSObjectProtocol?
     private var screenChangeObserver: NSObjectProtocol?
     private var isDialogPresented = false
+    private var lastStatusPresentation: StatusItemPresentation?
 
     /// When an outside click last dismissed the popover.
     ///
@@ -138,22 +139,12 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     }
 
     private func observeModel() {
-        model.$overallState
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.refreshStatusItem()
-            }
-            .store(in: &subscriptions)
-
-        model.$headline
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.refreshStatusItem()
-            }
-            .store(in: &subscriptions)
-
-        model.$detail
-            .receive(on: RunLoop.main)
+        Publishers.CombineLatest3(
+            model.$overallState.removeDuplicates(),
+            model.$headline.removeDuplicates(),
+            model.$detail.removeDuplicates()
+        )
+            .debounce(for: .milliseconds(20), scheduler: RunLoop.main)
             .sink { [weak self] _ in
                 self?.refreshStatusItem()
             }
@@ -177,21 +168,28 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         guard let button = statusItem.button else { return }
 
         let tone = overallTone
-        popover.contentSize = NSSize(
+        let size = NSSize(
             width: 310,
             height: tone == .healthy ? 300 : (model.isBusy ? 535 : 475)
         )
-        statusDot.isHidden = tone == .healthy
-        statusDot.color = tone.nsColor
-
         let stateDescription = tone.accessibilityDescription
         let tooltip = "AgentMicro - \(model.headline)\n\(model.detail)"
+        let presentation = StatusItemPresentation(
+            size: size,
+            tone: tone,
+            tooltip: tooltip,
+            stateDescription: stateDescription
+        )
+        guard presentation != lastStatusPresentation else { return }
+        lastStatusPresentation = presentation
+
+        if popover.contentSize != size { popover.contentSize = size }
+        let shouldHideDot = tone == .healthy
+        if statusDot.isHidden != shouldHideDot { statusDot.isHidden = shouldHideDot }
+        if statusDot.color != tone.nsColor { statusDot.color = tone.nsColor }
         button.toolTip = tooltip
         button.setAccessibilityValue(stateDescription)
         button.setAccessibilityHelp("\(tooltip). Click to open status and controls.")
-
-        button.layoutSubtreeIfNeeded()
-        statusDot.frame.origin = Self.statusDotOrigin(in: button)
     }
 
     private static let statusDotSize: CGFloat = 3.5
@@ -461,6 +459,13 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
             return .idle
         }
     }
+}
+
+private struct StatusItemPresentation: Equatable {
+    let size: NSSize
+    let tone: StatusTone
+    let tooltip: String
+    let stateDescription: String
 }
 
 private final class StatusDotView: NSView {

@@ -115,8 +115,8 @@ struct MenuPopoverView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             } icon: {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(StatusTone.actionRequired.color)
+                Image(systemName: model.isChatGPTPatched ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .foregroundStyle(integrationTone.color)
             }
 
             if model.hasNoPatchAction {
@@ -140,11 +140,11 @@ struct MenuPopoverView: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(StatusTone.actionRequired.color.opacity(0.09))
+                .fill(integrationTone.color.opacity(0.09))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(StatusTone.actionRequired.color.opacity(0.22), lineWidth: 1)
+                .stroke(integrationTone.color.opacity(0.22), lineWidth: 1)
         )
     }
 
@@ -173,16 +173,18 @@ struct MenuPopoverView: View {
     }
 
     private var showsIntegrationAction: Bool {
-        // Driven by the model rather than by matching words in display text, so
-        // a copy change cannot silently hide the panel. "Not found" and
-        // "Runtime unavailable" matched none of the old keywords, which hid the
-        // only explanation the user would have received.
-        model.overallState != .healthy
+        model.isPatchStatusReady
+            && (model.integrationNeedsAttention
+                || (model.isChatGPTPatched && model.overallState != .healthy))
+    }
+
+    private var integrationTone: StatusTone {
+        model.isChatGPTPatched ? .healthy : .actionRequired
     }
 
     private var integrationActionTitle: String {
         if model.integrationNeedsUpdate { return "Update the ChatGPT integration" }
-        if model.isChatGPTPatched { return "ChatGPT recovery" }
+        if model.isChatGPTPatched { return "ChatGPT integration ready" }
         return "Enable ChatGPT integration"
     }
 

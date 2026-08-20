@@ -87,6 +87,7 @@ final class AppModel: ObservableObject {
         bridgeEngine.onStatusChange = { [weak self] status in
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                guard status != self.bridgeStatus else { return }
                 self.bridgeStatus = status
                 self.recomputePresentation()
             }
@@ -141,7 +142,7 @@ final class AppModel: ObservableObject {
         presentationTask = Task { [weak self] in
             while !Task.isCancelled {
                 do {
-                    try await Task.sleep(for: .seconds(10))
+                    try await Task.sleep(for: .seconds(30))
                 } catch {
                     return
                 }
@@ -345,30 +346,38 @@ final class AppModel: ObservableObject {
     private func refreshPatchStatus() async {
         guard !isBusy else { return }
         await patchManager.refresh()
-        isPatchStatusReady = true
+        publishIfChanged(\.isPatchStatusReady, true)
         notifyIfNewUnpatchedBuild()
         recomputePresentation()
     }
 
+    private func publishIfChanged<Value: Equatable>(
+        _ keyPath: ReferenceWritableKeyPath<AppModel, Value>,
+        _ value: Value
+    ) {
+        guard self[keyPath: keyPath] != value else { return }
+        self[keyPath: keyPath] = value
+    }
+
     private func recomputePresentation() {
         let patch = patchManager.snapshot
-        canPatch = patch.canPatch
-        canRestore = patch.canRestore
-        integrationNeedsUpdate = patch.state == .integrationUpdateRequired
-        hasNoPatchAction = !patch.canPatch && !patch.canRestore
-        patchBlockedReason = isPatchStatusReady
+        publishIfChanged(\.canPatch, patch.canPatch)
+        publishIfChanged(\.canRestore, patch.canRestore)
+        publishIfChanged(\.integrationNeedsUpdate, patch.state == .integrationUpdateRequired)
+        publishIfChanged(\.hasNoPatchAction, !patch.canPatch && !patch.canRestore)
+        publishIfChanged(\.patchBlockedReason, isPatchStatusReady
             ? Self.blockedReason(for: patch)
-            : "Checking the installed ChatGPT build…"
+            : "Checking the installed ChatGPT build…")
         // A healthy patched install still reports canRestore, so attention is
         // decided by the state itself rather than by which buttons are live.
-        integrationNeedsAttention = patch.state != .compatiblePatched
-        isChatGPTPatched = patch.state == .compatiblePatched
-        isPhoneReady = bridgeStatus.bluetooth == .linked && bridgeStatus.reportStreamReady
-        isRouteVerified = bridgeStatus.isOperational
-        phoneStatus = phoneStatusText
-        patchStatusText = patchStatus
-        chatGPTStatus = chatGPTStatusText
-        lastRoundTripText = lastRoundTripDescription
+        publishIfChanged(\.integrationNeedsAttention, patch.state != .compatiblePatched)
+        publishIfChanged(\.isChatGPTPatched, patch.state == .compatiblePatched)
+        publishIfChanged(\.isPhoneReady, bridgeStatus.bluetooth == .linked && bridgeStatus.reportStreamReady)
+        publishIfChanged(\.isRouteVerified, bridgeStatus.isOperational)
+        publishIfChanged(\.phoneStatus, phoneStatusText)
+        publishIfChanged(\.patchStatusText, patchStatus)
+        publishIfChanged(\.chatGPTStatus, chatGPTStatusText)
+        publishIfChanged(\.lastRoundTripText, lastRoundTripDescription)
 
         if !isPatchStatusReady, operationMessage == nil {
             overallState = .connecting
@@ -542,7 +551,6 @@ final class AppModel: ObservableObject {
     private var chatGPTStatusText: String {
         let patch = patchManager.snapshot
         guard patch.installed else { return "Not found" }
-        guard patch.running else { return "Not running" }
         guard patch.state == .compatiblePatched else {
             switch patch.state {
             case .compatiblePristine:
@@ -554,8 +562,7 @@ final class AppModel: ObservableObject {
             }
         }
         if bridgeStatus.isOperational { return "Verified" }
-        if bridgeStatus.chatGPTLinked { return "Checking" }
-        return "Waiting"
+        return "Patched"
     }
 
     private var patchStatus: String {
