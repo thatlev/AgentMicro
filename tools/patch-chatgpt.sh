@@ -13,15 +13,15 @@
 #
 # Environment:
 #   CHATGPT_APP                    ChatGPT.app path
-#   CODEX_MICRO_PATCH_RUNTIME      bundled PatchRuntime directory
-#   CODEX_MICRO_NODE               explicit Node executable
-#   CODEX_MICRO_ASAR_JS            explicit @electron/asar bin/asar.mjs
-#   CODEX_MICRO_SHIM               explicit codex-hid-shim.js
-#   CODEX_MICRO_INSPECTOR          explicit asar-inspect.cjs
-#   CODEX_MICRO_BACKUP_ROOT        versioned backup root
-#   CODEX_MICRO_LEGACY_BACKUP_ROOT existing resource-only backup root
-#   CODEX_MICRO_STATE_ROOT         operation-lock directory
-#   CODEX_MICRO_DEVELOPER_FALLBACK allow system Node/npx when set to 1
+#   AGENT_MICRO_PATCH_RUNTIME      bundled PatchRuntime directory
+#   AGENT_MICRO_NODE               explicit Node executable
+#   AGENT_MICRO_ASAR_JS            explicit @electron/asar bin/asar.mjs
+#   AGENT_MICRO_SHIM               explicit codex-hid-shim.js
+#   AGENT_MICRO_INSPECTOR          explicit asar-inspect.cjs
+#   AGENT_MICRO_BACKUP_ROOT        versioned backup root
+#   AGENT_MICRO_LEGACY_BACKUP_ROOT existing resource-only backup root
+#   AGENT_MICRO_STATE_ROOT         operation-lock directory
+#   AGENT_MICRO_DEVELOPER_FALLBACK allow system Node/npx when set to 1
 #   PACK_ONLY                      build artifacts without installing when 1
 
 set -euo pipefail
@@ -29,11 +29,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 APP="${CHATGPT_APP:-/Applications/ChatGPT.app}"
-RUNTIME_ROOT="${CODEX_MICRO_PATCH_RUNTIME:-$SCRIPT_DIR}"
-BACKUP_ROOT="${CODEX_MICRO_BACKUP_ROOT:-$HOME/Library/Application Support/AgentMicro/Backups}"
-LEGACY_BACKUP_ROOT="${CODEX_MICRO_LEGACY_BACKUP_ROOT:-$HOME/.codexbridge/backup}"
-STATE_ROOT="${CODEX_MICRO_STATE_ROOT:-$HOME/Library/Application Support/AgentMicro}"
-DEVELOPER_FALLBACK="${CODEX_MICRO_DEVELOPER_FALLBACK:-}"
+RUNTIME_ROOT="${AGENT_MICRO_PATCH_RUNTIME:-$SCRIPT_DIR}"
+BACKUP_ROOT="${AGENT_MICRO_BACKUP_ROOT:-$HOME/Library/Application Support/AgentMicro/Backups}"
+LEGACY_BACKUP_ROOT="${AGENT_MICRO_LEGACY_BACKUP_ROOT:-$HOME/.codexbridge/backup}"
+STATE_ROOT="${AGENT_MICRO_STATE_ROOT:-$HOME/Library/Application Support/AgentMicro}"
+DEVELOPER_FALLBACK="${AGENT_MICRO_DEVELOPER_FALLBACK:-}"
 OPENAI_TEAM_IDENTIFIER="2DC432GLL2"
 PATCH_SCHEMA=2
 MODE="patch"
@@ -78,7 +78,7 @@ emit_event() {
     local stage="$2"
     local message="$3"
     local progress="${4:--1}"
-    printf 'CODEX_MICRO_EVENT\t{"event":"%s","stage":"%s","message":"%s","progress":%s}\n' \
+    printf 'AGENT_MICRO_EVENT\t{"event":"%s","stage":"%s","message":"%s","progress":%s}\n' \
         "$(json_escape "$event")" \
         "$(json_escape "$stage")" \
         "$(json_escape "$message")" \
@@ -146,23 +146,23 @@ if [ "$DEVELOPER_FALLBACK" = "1" ]; then
 fi
 
 NODE_BIN="$(first_executable \
-    "${CODEX_MICRO_NODE:-}" \
+    "${AGENT_MICRO_NODE:-}" \
     "$RUNTIME_ROOT/node" \
     "$RUNTIME_ROOT/bin/node" \
     "$SYSTEM_NODE" || true)"
 
 INSPECTOR="$(first_file \
-    "${CODEX_MICRO_INSPECTOR:-}" \
+    "${AGENT_MICRO_INSPECTOR:-}" \
     "$RUNTIME_ROOT/asar-inspect.cjs" \
     "$REPO_ROOT/macos/AgentMicro/PatchRuntime/asar-inspect.cjs" || true)"
 
 SHIM_SRC="$(first_file \
-    "${CODEX_MICRO_SHIM:-}" \
+    "${AGENT_MICRO_SHIM:-}" \
     "$RUNTIME_ROOT/codex-hid-shim.js" \
     "$REPO_ROOT/tools/AgentMicroBridge/codex-hid-shim.js" || true)"
 
 ASAR_JS="$(first_file \
-    "${CODEX_MICRO_ASAR_JS:-}" \
+    "${AGENT_MICRO_ASAR_JS:-}" \
     "$RUNTIME_ROOT/node_modules/@electron/asar/bin/asar.mjs" \
     "$RUNTIME_ROOT/node_modules/@electron/asar/bin/asar.js" \
     "$REPO_ROOT/node_modules/@electron/asar/bin/asar.mjs" \

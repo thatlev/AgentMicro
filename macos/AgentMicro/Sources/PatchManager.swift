@@ -132,12 +132,12 @@ final class PatchManager: ObservableObject {
 
         var configuredEnvironment = environment
         configuredEnvironment["CHATGPT_APP"] = self.appURL.path
-        configuredEnvironment["CODEX_MICRO_PATCH_RUNTIME"] = resolvedRuntime.path
-        configuredEnvironment["CODEX_MICRO_DEVELOPER_FALLBACK"] =
+        configuredEnvironment["AGENT_MICRO_PATCH_RUNTIME"] = resolvedRuntime.path
+        configuredEnvironment["AGENT_MICRO_DEVELOPER_FALLBACK"] =
             Self.isRunningFromApplicationBundle ? "0" : "1"
 
         Self.setPathIfPresent(
-            key: "CODEX_MICRO_NODE",
+            key: "AGENT_MICRO_NODE",
             candidates: [
                 resolvedRuntime.appendingPathComponent("node"),
                 resolvedRuntime.appendingPathComponent("bin/node"),
@@ -145,7 +145,7 @@ final class PatchManager: ObservableObject {
             in: &configuredEnvironment
         )
         Self.setPathIfPresent(
-            key: "CODEX_MICRO_ASAR_JS",
+            key: "AGENT_MICRO_ASAR_JS",
             candidates: [
                 resolvedRuntime.appendingPathComponent(
                     "node_modules/@electron/asar/bin/asar.mjs"
@@ -157,12 +157,12 @@ final class PatchManager: ObservableObject {
             in: &configuredEnvironment
         )
         Self.setPathIfPresent(
-            key: "CODEX_MICRO_INSPECTOR",
+            key: "AGENT_MICRO_INSPECTOR",
             candidates: [resolvedRuntime.appendingPathComponent("asar-inspect.cjs")],
             in: &configuredEnvironment
         )
         Self.setPathIfPresent(
-            key: "CODEX_MICRO_SHIM",
+            key: "AGENT_MICRO_SHIM",
             candidates: [resolvedRuntime.appendingPathComponent("codex-hid-shim.js")],
             in: &configuredEnvironment
         )
@@ -421,7 +421,7 @@ final class PatchManager: ObservableObject {
     }
 
     nonisolated private static func decodeEvent(from line: String) -> ScriptEvent? {
-        let prefix = "CODEX_MICRO_EVENT\t"
+        let prefix = "AGENT_MICRO_EVENT\t"
         guard line.hasPrefix(prefix),
               let data = String(line.dropFirst(prefix.count)).data(using: .utf8)
         else {
@@ -474,7 +474,7 @@ final class PatchManager: ObservableObject {
     nonisolated private static func resolveRuntimeURL(
         environment: [String: String]
     ) -> URL {
-        if let configured = environment["CODEX_MICRO_PATCH_RUNTIME"],
+        if let configured = environment["AGENT_MICRO_PATCH_RUNTIME"],
            !configured.isEmpty
         {
             return URL(fileURLWithPath: configured).standardizedFileURL

@@ -23,7 +23,7 @@ const SOCKET_PATH = process.env.CODEX_BRIDGE_SOCKET
   || path.join(os.tmpdir(), 'CodexMicro', 'codexbridge.sock');
 // Read by the menu app's ASAR inspector. Bump this whenever the injected shim
 // protocol or safety semantics change in a way that requires re-patching.
-const CODEX_MICRO_SHIM_SCHEMA = 2;
+const AGENT_MICRO_SHIM_SCHEMA = 2;
 const REPORT_ID = 6;
 const VID = 12346;   // 0x303A
 const PID = 33632;   // 0x8360
@@ -421,7 +421,7 @@ function createBridge() {
     },
   };
 
-  return { native, nodehid, shimSchema: CODEX_MICRO_SHIM_SCHEMA };
+  return { native, nodehid, shimSchema: AGENT_MICRO_SHIM_SCHEMA };
 }
 
 function runSelfTests() {

@@ -22,17 +22,17 @@ permissions on `node` and `patch-chatgpt.sh`.
 
 For development, `PatchManager` and `tools/patch-chatgpt.sh` also accept:
 
-- `CODEX_MICRO_PATCH_RUNTIME`: directory containing the layout above
-- `CODEX_MICRO_NODE`: explicit Node executable
-- `CODEX_MICRO_ASAR_JS`: explicit `asar.mjs` (legacy `asar.js` also works)
-- `CODEX_MICRO_SHIM`: explicit `codex-hid-shim.js`
-- `CODEX_MICRO_INSPECTOR`: explicit `asar-inspect.cjs`
-- `CODEX_MICRO_BACKUP_ROOT`: alternate versioned-backup directory
-- `CODEX_MICRO_LEGACY_BACKUP_ROOT`: resource-only backups from the earlier helper
-- `CODEX_MICRO_STATE_ROOT`: alternate operation-lock directory
-- `CODEX_MICRO_DEVELOPER_FALLBACK=1`: allow system Node and `npx @electron/asar`
+- `AGENT_MICRO_PATCH_RUNTIME`: directory containing the layout above
+- `AGENT_MICRO_NODE`: explicit Node executable
+- `AGENT_MICRO_ASAR_JS`: explicit `asar.mjs` (legacy `asar.js` also works)
+- `AGENT_MICRO_SHIM`: explicit `codex-hid-shim.js`
+- `AGENT_MICRO_INSPECTOR`: explicit `asar-inspect.cjs`
+- `AGENT_MICRO_BACKUP_ROOT`: alternate versioned-backup directory
+- `AGENT_MICRO_LEGACY_BACKUP_ROOT`: resource-only backups from the earlier helper
+- `AGENT_MICRO_STATE_ROOT`: alternate operation-lock directory
+- `AGENT_MICRO_DEVELOPER_FALLBACK=1`: allow system Node and `npx @electron/asar`
 
-The distributed app sets `CODEX_MICRO_DEVELOPER_FALLBACK=0`, so patching never
+The distributed app sets `AGENT_MICRO_DEVELOPER_FALLBACK=0`, so patching never
 downloads code at runtime.
 
 ## Backup retention

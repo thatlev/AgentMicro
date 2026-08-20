@@ -36,11 +36,11 @@ bridge status** from the command palette to confirm it is listening.
 
 ## Settings
 
-- `codexMicro.socketPath` — override the socket (default `$TMPDIR/codexbridge-vscode.sock`).
-- `codexMicro.terminalApprove` / `terminalReject` / `terminalSubmit` — the text
+- `agentMicro.socketPath` — override the socket (default `$TMPDIR/codexbridge-vscode.sock`).
+- `agentMicro.terminalApprove` / `terminalReject` / `terminalSubmit` — the text
   sent to an *agent terminal* target on Approve / Reject / Submit (default
   `y\n` / `n\n` / `\n`). Tune these to whatever Codex/Kimi expect.
-- `codexMicro.decorateTabs` — show semantic status colors on pinned file tabs.
+- `agentMicro.decorateTabs` — show semantic status colors on pinned file tabs.
 
 ## Notes / limits
 

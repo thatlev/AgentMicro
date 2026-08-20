@@ -166,7 +166,7 @@ enum ControlPage: Int, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .codex: return "CODEX MICRO"
+        case .codex: return "AGENTMICRO"
         case .vscode: return "VS CODE MICRO"
         case .t3Code: return "T3 CODE MICRO"
         case .claudeCode: return "CLAUDE DESKTOP"
@@ -1088,7 +1088,7 @@ private struct HardwareConsole: View {
         let ink = highlighted ? glowColor : Color.black.opacity(0.64)
         let glowRadius = max(1.5, side * 0.011)
 
-        Text("CODEX MICRO · REMOTE")
+        Text("AGENTMICRO · REMOTE")
             .font(highlighted ? inscriptionFont.weight(.semibold) : inscriptionFont)
             .foregroundStyle(ink)
             .shadow(color: highlighted ? glowColor.opacity(0.75) : .clear, radius: glowRadius)

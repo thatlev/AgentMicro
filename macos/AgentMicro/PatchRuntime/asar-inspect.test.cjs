@@ -51,14 +51,17 @@ function fixtureFiles(kind) {
 
   if (kind === 'current') {
     files['codex-hid-shim.js'] = fs.readFileSync(currentShimPath);
+  } else if (kind === 'legacy-name-current-schema') {
+    files['codex-hid-shim.js'] =
+      "'use strict'; const CODEX_MICRO_SHIM_SCHEMA = 2;";
   } else if (kind === 'legacy-unmarked') {
     files['codex-hid-shim.js'] = "'use strict'; module.exports = {};";
   } else if (kind === 'schema-1') {
     files['codex-hid-shim.js'] =
-      "'use strict'; const CODEX_MICRO_SHIM_SCHEMA = 1;";
+      "'use strict'; const AGENT_MICRO_SHIM_SCHEMA = 1;";
   } else if (kind === 'schema-3') {
     files['codex-hid-shim.js'] =
-      "'use strict'; const CODEX_MICRO_SHIM_SCHEMA = 3;";
+      "'use strict'; const AGENT_MICRO_SHIM_SCHEMA = 3;";
   } else {
     throw new Error(`Unknown fixture kind: ${kind}`);
   }
@@ -148,13 +151,13 @@ function patchStatusFixture(directory, kind, environmentOverrides = {}, label = 
       env: {
         ...process.env,
         CHATGPT_APP: appPath,
-        CODEX_MICRO_NODE: process.execPath,
-        CODEX_MICRO_INSPECTOR: inspectorPath,
-        CODEX_MICRO_SHIM: currentShimPath,
-        CODEX_MICRO_BACKUP_ROOT: path.join(fixtureRoot, 'Backups'),
-        CODEX_MICRO_LEGACY_BACKUP_ROOT: path.join(fixtureRoot, 'Legacy'),
-        CODEX_MICRO_STATE_ROOT: path.join(fixtureRoot, 'State'),
-        CODEX_MICRO_DEVELOPER_FALLBACK: '0',
+        AGENT_MICRO_NODE: process.execPath,
+        AGENT_MICRO_INSPECTOR: inspectorPath,
+        AGENT_MICRO_SHIM: currentShimPath,
+        AGENT_MICRO_BACKUP_ROOT: path.join(fixtureRoot, 'Backups'),
+        AGENT_MICRO_LEGACY_BACKUP_ROOT: path.join(fixtureRoot, 'Legacy'),
+        AGENT_MICRO_STATE_ROOT: path.join(fixtureRoot, 'State'),
+        AGENT_MICRO_DEVELOPER_FALLBACK: '0',
         ...environmentOverrides,
       },
     }
@@ -177,6 +180,14 @@ try {
   assert.equal(current.value.state, 'compatible-patched');
   assert.equal(current.value.details.shimSchema, 2);
   assert.equal(current.value.details.expectedShimSchema, 2);
+
+  const legacyNameCurrentSchema = inspectFixture(
+    temporaryDirectory,
+    'legacy-name-current-schema'
+  );
+  assert.equal(legacyNameCurrentSchema.exitCode, 0);
+  assert.equal(legacyNameCurrentSchema.value.state, 'compatible-patched');
+  assert.equal(legacyNameCurrentSchema.value.details.shimSchema, 2);
 
   for (const kind of ['legacy-unmarked', 'schema-1']) {
     const oldPatch = inspectFixture(temporaryDirectory, kind);
@@ -204,7 +215,7 @@ try {
   const brokenRuntimeStatus = patchStatusFixture(
     temporaryDirectory,
     'pristine',
-    { CODEX_MICRO_SHIM: path.join(temporaryDirectory, 'missing-shim.js') },
+    { AGENT_MICRO_SHIM: path.join(temporaryDirectory, 'missing-shim.js') },
     'pristine-no-shim'
   );
   assert.equal(brokenRuntimeStatus.patchState, 'compatible-pristine');
@@ -220,7 +231,7 @@ try {
   assert.match(oldStatus.reason, /Reinstall ChatGPT, then choose Patch ChatGPT/);
 
   process.stdout.write(
-    'asar-inspect/status fixture tests: PASS (5 inspector, 3 status cases)\n'
+    'asar-inspect/status fixture tests: PASS (6 inspector, 3 status cases)\n'
   );
 } finally {
   fs.rmSync(temporaryDirectory, { recursive: true, force: true });

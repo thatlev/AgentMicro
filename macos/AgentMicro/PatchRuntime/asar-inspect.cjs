@@ -234,7 +234,7 @@ try {
   if (shimPresent) {
     const shimSource = readEntry('codex-hid-shim.js').toString('utf8');
     const schemaMatch = shimSource.match(
-      /\bCODEX_MICRO_SHIM_SCHEMA\s*=\s*(\d+)\b/
+      /\b(?:AGENT|CODEX)_MICRO_SHIM_SCHEMA\s*=\s*(\d+)\b/
     );
     if (schemaMatch) shimSchema = Number(schemaMatch[1]);
   }

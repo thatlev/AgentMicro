@@ -43,19 +43,19 @@ const KIMI_TARGET_ID = 'kimi';
 const CHATGPT_TARGET_ID = 'chatgpt';
 
 const STATUS_COLORS = {
-  idle: 'codexMicro.statusIdle',
-  thinking: 'codexMicro.statusWorking',
-  working: 'codexMicro.statusWorking',
-  running: 'codexMicro.statusWorking',
-  complete: 'codexMicro.statusComplete',
-  done: 'codexMicro.statusComplete',
-  unread: 'codexMicro.statusComplete',
-  needs_input: 'codexMicro.statusNeedsInput',
-  'awaiting-approval': 'codexMicro.statusNeedsInput',
-  'awaiting-response': 'codexMicro.statusNeedsInput',
-  approval: 'codexMicro.statusNeedsInput',
-  error: 'codexMicro.statusError',
-  failed: 'codexMicro.statusError',
+  idle: 'agentMicro.statusIdle',
+  thinking: 'agentMicro.statusWorking',
+  working: 'agentMicro.statusWorking',
+  running: 'agentMicro.statusWorking',
+  complete: 'agentMicro.statusComplete',
+  done: 'agentMicro.statusComplete',
+  unread: 'agentMicro.statusComplete',
+  needs_input: 'agentMicro.statusNeedsInput',
+  'awaiting-approval': 'agentMicro.statusNeedsInput',
+  'awaiting-response': 'agentMicro.statusNeedsInput',
+  approval: 'agentMicro.statusNeedsInput',
+  error: 'agentMicro.statusError',
+  failed: 'agentMicro.statusError',
 };
 
 /** Guess which agent a terminal is running from its title. */
@@ -86,8 +86,8 @@ function activate(context) {
   // replace their Tab wrappers after focus, title, or native-pin changes. Keep
   // opaque per-window identities through a conservative reconciliation registry
   // so pin reordering can never transfer an id to the adjacent conversation.
-  const windowIdentitySeed = context && typeof context.__codexMicroTestWindowId === 'string'
-    ? context.__codexMicroTestWindowId
+  const windowIdentitySeed = context && typeof context.__agentMicroTestWindowId === 'string'
+    ? context.__agentMicroTestWindowId
     : `${process.pid}`;
   const windowInstanceId = crypto.createHash('sha256')
     .update(windowIdentitySeed)
@@ -112,7 +112,7 @@ function activate(context) {
     return id;
   };
 
-  const cfg = () => vscode.workspace.getConfiguration('codexMicro');
+  const cfg = () => vscode.workspace.getConfiguration('agentMicro');
   let selectedTargetId = null;
   let pinnedTargetIds = Array(6).fill(null);
   let slotStatuses = Array(6).fill('off');
@@ -170,7 +170,7 @@ function activate(context) {
   };
   const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 90);
   statusItem.name = 'AgentMicro selected agent';
-  statusItem.command = 'codexMicro.showStatus';
+  statusItem.command = 'agentMicro.showStatus';
 
   function workspaceCwd(uri) {
     const folder = uri && vscode.workspace.getWorkspaceFolder
@@ -962,7 +962,7 @@ function activate(context) {
         sendPeerState({}, state.focused);
       }
     }),
-    vscode.commands.registerCommand('codexMicro.showStatus', () => {
+    vscode.commands.registerCommand('agentMicro.showStatus', () => {
       out.show(true);
       const count = bridgeClientCount();
       const windowCount = ownsSocket && hub ? hub.windows.size : 1;

@@ -153,7 +153,7 @@ test('socket protocol creates, selects, pins, decorates, inserts, and submits', 
       activeTerminal: null,
       activeTextEditor: null,
       tabGroups: { all: [tabGroup], onDidChangeTabs: event() },
-      createOutputChannel: () => ({ appendLine(message) { if (process.env.CODEX_MICRO_TEST_LOG) console.error(message); }, show() {}, dispose() {} }),
+      createOutputChannel: () => ({ appendLine(message) { if (process.env.AGENT_MICRO_TEST_LOG) console.error(message); }, show() {}, dispose() {} }),
       createStatusBarItem: () => ({ show() {}, hide() {}, dispose() {} }),
       registerFileDecorationProvider(provider) { decorationProvider = provider; return { dispose() {} }; },
       onDidOpenTerminal: event(),
@@ -271,7 +271,7 @@ test('socket protocol creates, selects, pins, decorates, inserts, and submits', 
     slots: [{ id: 0, status: 'thinking' }] });
   await waitFor((msg) => msg.type === 'ack' && msg.op === 'status');
   const decoration = decorationProvider.provideFileDecoration(fileUri);
-  assert.equal(decoration.color.id, 'codexMicro.statusWorking');
+  assert.equal(decoration.color.id, 'agentMicro.statusWorking');
   assert.equal(decoration.badge, '●');
 
   send({ op: 'list' });

@@ -175,8 +175,8 @@ test('socket hub retains two projects and routes focus, pins, and NEW to the own
 
   const subscriptionsA = [];
   const subscriptionsB = [];
-  extensionA.activate({ subscriptions: subscriptionsA, __codexMicroTestWindowId: 'project-a' });
-  extensionB.activate({ subscriptions: subscriptionsB, __codexMicroTestWindowId: 'project-b' });
+  extensionA.activate({ subscriptions: subscriptionsA, __agentMicroTestWindowId: 'project-a' });
+  extensionB.activate({ subscriptions: subscriptionsB, __agentMicroTestWindowId: 'project-b' });
   t.after(() => {
     for (const disposable of subscriptionsB.reverse()) disposable.dispose?.();
     for (const disposable of subscriptionsA.reverse()) disposable.dispose?.();

@@ -11,7 +11,7 @@ enum LegacyMigrationManager {
     /// Disables the old invisible KeepAlive helper by identifying its executable
     /// path rather than carrying its former product branding into this app.
     static func disableInvisibleHelperIfNeeded() -> LegacyMigrationResult {
-        guard ProcessInfo.processInfo.environment["CODEX_MICRO_SKIP_LEGACY_MIGRATION"] != "1"
+        guard ProcessInfo.processInfo.environment["AGENT_MICRO_SKIP_LEGACY_MIGRATION"] != "1"
         else {
             return LegacyMigrationResult(notes: ["Legacy helper migration skipped by environment."])
         }

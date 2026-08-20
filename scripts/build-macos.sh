@@ -19,7 +19,7 @@ NODE_ARCHIVE_SHA256="e1a97e14c99c803e96c7339403282ea05a499c32f8d83defe9ef5ec66f9
 NODE_DISTRIBUTION="node-v${NODE_VERSION}-darwin-arm64"
 NODE_ARCHIVE_NAME="${NODE_DISTRIBUTION}.tar.gz"
 NODE_BASE_URL="https://nodejs.org/dist/v${NODE_VERSION}"
-CACHE_ROOT="${CODEX_MICRO_BUILD_CACHE:-$HOME/Library/Caches/AgentMicroBuild}"
+CACHE_ROOT="${AGENT_MICRO_BUILD_CACHE:-$HOME/Library/Caches/AgentMicroBuild}"
 NODE_CACHE_ROOT="$CACHE_ROOT/node/v${NODE_VERSION}"
 NPM_CACHE_ROOT="$CACHE_ROOT/npm"
 SIGN_IDENTITY="${MACOS_SIGN_IDENTITY:--}"
@@ -46,13 +46,13 @@ cleanup() {
 prepare_node_runtime() {
     local destination="$1"
 
-    local archive_override="${CODEX_MICRO_NODE_ARCHIVE:-}"
+    local archive_override="${AGENT_MICRO_NODE_ARCHIVE:-}"
     local archive="$NODE_CACHE_ROOT/$NODE_ARCHIVE_NAME"
 
     mkdir -p "$NODE_CACHE_ROOT"
 
     if [[ -n "$archive_override" ]]; then
-        [[ -f "$archive_override" ]] || die "CODEX_MICRO_NODE_ARCHIVE does not exist: $archive_override"
+        [[ -f "$archive_override" ]] || die "AGENT_MICRO_NODE_ARCHIVE does not exist: $archive_override"
         cp "$archive_override" "$archive"
     elif [[ ! -f "$archive" ]]; then
         log "downloading the pinned Node.js ${NODE_VERSION} Apple Silicon runtime"

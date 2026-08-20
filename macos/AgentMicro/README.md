@@ -56,7 +56,7 @@ ChatGPT. The build cache lives in:
 ~/Library/Caches/AgentMicroBuild
 ```
 
-For an offline build, set `CODEX_MICRO_NODE_ARCHIVE` to the official
+For an offline build, set `AGENT_MICRO_NODE_ARCHIVE` to the official
 `node-v24.18.0-darwin-arm64.tar.gz` archive. The build still checks it against
 the pinned official SHA-256 digest
 `e1a97e14c99c803e96c7339403282ea05a499c32f8d83defe9ef5ec66f979ed1`.

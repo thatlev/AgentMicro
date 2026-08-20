@@ -952,7 +952,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
             bluetoothState = .denied
             server.setPresent(false)
             server.setPhonePresent(false)
-#if CODEX_MICRO_MENU_APP
+#if AGENT_MICRO_MENU_APP
             log("Bluetooth access denied. Allow AgentMicro in System Settings › Privacy & Security › Bluetooth, then choose Reconnect.")
 #else
             log("Bluetooth access denied. Allow the bridge in System Settings › Privacy & Security › Bluetooth, then rerun.")
@@ -4659,7 +4659,7 @@ func runBridgeRegressionTests() -> Bool {
 
 // MARK: - entry point
 
-#if CODEX_MICRO_MENU_APP
+#if AGENT_MICRO_MENU_APP
 AgentMicroMenuApplication.run()
 #else
 enum Target { case auto, chatgpt, vscode }

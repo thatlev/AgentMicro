@@ -113,7 +113,7 @@ final class AgentMicroAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var isRunningFromStableInstallLocation: Bool {
-        if ProcessInfo.processInfo.environment["CODEX_MICRO_ALLOW_UNINSTALLED"] == "1" {
+        if ProcessInfo.processInfo.environment["AGENT_MICRO_ALLOW_UNINSTALLED"] == "1" {
             return true
         }
         let bundlePath = Bundle.main.bundleURL.resolvingSymlinksInPath().path
