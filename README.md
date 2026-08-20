@@ -25,11 +25,10 @@ curl -fsSL https://thatlev.com/agentmicro.sh | sh
 ```
 
 The installer downloads the latest public source, builds it locally, verifies
-the app, installs it in `/Applications`, clears the downloaded-source quarantine
-attribute, and launches onboarding. It requires macOS 14+, full Xcode, and
-Homebrew when XcodeGen or Node are not already installed. The local build is
-ad-hoc signed; public distribution still requires Developer ID signing and
-notarization.
+the app, installs it in `/Applications`, clears quarantine, and launches
+onboarding. It requires macOS 14+, full Xcode, and Homebrew when XcodeGen or
+Node are not already installed. The local build is ad-hoc signed; public
+distribution still requires Developer ID signing and notarization.
 
 AgentMicro opens as a menu-bar app. First run guides you through the real setup:
 

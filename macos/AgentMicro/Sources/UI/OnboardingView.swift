@@ -322,8 +322,7 @@ struct OnboardingView: View {
 
             VStack(spacing: 10) {
                 supportRow(
-                    icon: "at",
-                    assetName: "LevProfilePicture",
+                    assetName: "XMark",
                     title: "Follow @thatlevco on X",
                     detail: "Product updates, demos, and new builds.",
                     completed: openedX
@@ -332,7 +331,7 @@ struct OnboardingView: View {
                     NSWorkspace.shared.open(Links.xProfile)
                 }
                 supportRow(
-                    icon: "star.fill",
+                    assetName: "GitHubMark",
                     title: "Star AgentMicro on GitHub",
                     detail: "It helps other builders discover the project.",
                     completed: openedGitHub
@@ -343,9 +342,6 @@ struct OnboardingView: View {
             }
             .frame(maxWidth: 520)
 
-            Text("AgentMicro can confirm that the links were opened, but never reads your social or GitHub account.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -533,8 +529,7 @@ struct OnboardingView: View {
     }
 
     private func supportRow(
-        icon: String,
-        assetName: String? = nil,
+        assetName: String,
         title: String,
         detail: String,
         completed: Bool,
@@ -542,19 +537,13 @@ struct OnboardingView: View {
     ) -> some View {
         Button(action: action) {
             HStack(spacing: 14) {
-                Group {
-                    if let assetName {
-                        Image(assetName)
-                            .resizable()
-                            .scaledToFill()
-                            .clipShape(Circle())
-                    } else {
-                        Image(systemName: icon)
-                            .font(.title3.weight(.semibold))
-                            .foregroundStyle(completed ? .green : Color.accentColor)
-                    }
-                }
-                .frame(width: 34, height: 34)
+                Image(assetName)
+                    .resizable()
+                    .renderingMode(.template)
+                    .scaledToFit()
+                    .foregroundStyle(completed ? .green : Color.primary)
+                    .padding(5)
+                    .frame(width: 34, height: 34)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title).font(.headline)
                     Text(detail).font(.caption).foregroundStyle(.secondary)
@@ -615,9 +604,9 @@ struct OnboardingView: View {
 }
 
 private enum Links {
-    static let repository = URL(string: "https://github.com/thatlev/AgentMicro")!
+    static let repository = URL(string: "https://thatlev.com/go/agentmicro/github")!
     static let mobileSetup = URL(string: "https://github.com/thatlev/AgentMicro/blob/main/docs/MOBILE-SETUP.md")!
     static let t3Code = URL(string: "https://github.com/thatlev/t3code")!
     static let openCodex = URL(string: "https://github.com/lidge-jun/opencodex")!
-    static let xProfile = URL(string: "https://x.com/thatlevco")!
+    static let xProfile = URL(string: "https://thatlev.com/go/agentmicro/x")!
 }
