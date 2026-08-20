@@ -208,48 +208,10 @@ struct MenuPopoverView: View {
     }
 
     private var operationProgress: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                ProgressView()
-                    .controlSize(.small)
-                Text(operationTitle)
-                    .font(.callout.weight(.semibold))
-                Spacer(minLength: 0)
-                if let fraction = model.operationProgress?.fraction {
-                    Text("\(Int((fraction * 100).rounded()))%")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            if let fraction = model.operationProgress?.fraction {
-                ProgressView(value: fraction, total: 1)
-                    .progressViewStyle(.linear)
-            }
-
-            Text(model.operationProgress?.message ?? model.detail)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(operationAccessibilityLabel)
-    }
-
-    private var operationTitle: String {
-        switch model.operationProgress?.operation {
-        case .restore: return "Restoring ChatGPT"
-        case .patch: return "Patching ChatGPT"
-        case nil: return "Working safely"
-        }
-    }
-
-    private var operationAccessibilityLabel: String {
-        let message = model.operationProgress?.message ?? model.detail
-        if let fraction = model.operationProgress?.fraction {
-            return "\(operationTitle), \(Int((fraction * 100).rounded())) percent. \(message)"
-        }
-        return "\(operationTitle). \(message)"
+        PatchOperationProgressView(
+            progress: model.operationProgress,
+            fallbackMessage: model.detail
+        )
     }
 
     private var overallTone: StatusTone {

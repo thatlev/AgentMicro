@@ -115,6 +115,8 @@ final class PatchManager: ObservableObject {
 
     private let scriptURL: URL
     private let baseEnvironment: [String: String]
+    private var progressTicker: AnyCancellable?
+    private var progressTarget = 0.0
 
     init(
         appURL: URL = URL(fileURLWithPath: "/Applications/ChatGPT.app"),
@@ -249,15 +251,17 @@ final class PatchManager: ObservableObject {
         }
 
         isBusy = true
-        progress = PatchProgress(
+        beginProgress(PatchProgress(
             operation: operation,
             stage: "starting",
             message: operation == .patch
                 ? "Preparing to patch ChatGPT…"
                 : "Preparing to restore ChatGPT…",
             fraction: 0
-        )
+        ))
         defer {
+            progressTicker?.cancel()
+            progressTicker = nil
             isBusy = false
             progress = nil
         }
@@ -275,12 +279,12 @@ final class PatchManager: ObservableObject {
                 [weak self] event in
                 guard let self else { return }
                 if event.event == "progress" {
-                    self.progress = PatchProgress(
+                    self.updateProgress(PatchProgress(
                         operation: operation,
                         stage: event.stage,
                         message: event.message,
                         fraction: event.progress.flatMap { $0 >= 0 ? $0 : nil }
-                    )
+                    ))
                 }
             }
 
@@ -307,6 +311,10 @@ final class PatchManager: ObservableObject {
             )
         }
 
+        if result.succeeded {
+            await finishProgress(message: result.message)
+        }
+
         lastResult = result
         AppLogStore.shared.append(
             "\(operation.rawValue.capitalized) "
@@ -328,6 +336,73 @@ final class PatchManager: ObservableObject {
             )
         }
         return result
+    }
+
+    private func beginProgress(_ value: PatchProgress) {
+        progress = value
+        progressTarget = PatchProgressTimeline.target(
+            for: value.operation,
+            stage: value.stage,
+            reported: value.fraction
+        )
+        progressTicker?.cancel()
+        progressTicker = Timer.publish(every: 1.0 / 30.0, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                self?.tickProgress()
+            }
+    }
+
+    private func updateProgress(_ value: PatchProgress) {
+        let current = progress?.fraction ?? 0
+        progressTarget = max(
+            current,
+            PatchProgressTimeline.target(
+                for: value.operation,
+                stage: value.stage,
+                reported: value.fraction
+            )
+        )
+        progress = PatchProgress(
+            operation: value.operation,
+            stage: value.stage,
+            message: value.message,
+            fraction: current
+        )
+    }
+
+    private func tickProgress() {
+        guard let value = progress, let current = value.fraction else { return }
+        let next = PatchProgressTimeline.nextFraction(
+            current: current,
+            target: progressTarget
+        )
+        guard next != current else { return }
+        progress = PatchProgress(
+            operation: value.operation,
+            stage: value.stage,
+            message: value.message,
+            fraction: next
+        )
+    }
+
+    private func finishProgress(message: String) async {
+        progressTicker?.cancel()
+        progressTicker = nil
+        guard let value = progress else { return }
+        let start = value.fraction ?? 0
+        let frames = 15
+        for frame in 1...frames {
+            try? await Task.sleep(for: .milliseconds(20))
+            let fraction = start + (1 - start) * Double(frame) / Double(frames)
+            progress = PatchProgress(
+                operation: value.operation,
+                stage: "complete",
+                message: frame == frames ? message : value.message,
+                fraction: fraction
+            )
+        }
+        try? await Task.sleep(for: .milliseconds(180))
     }
 
     private func runScript(

@@ -267,6 +267,14 @@ private struct IntegrationSettingsTab: View {
                     } else {
                         PatchActionButtons(model: model, compact: true)
                     }
+
+                    if model.isBusy {
+                        Divider()
+                        PatchOperationProgressView(
+                            progress: model.operationProgress,
+                            fallbackMessage: model.detail
+                        )
+                    }
                 }
             }
         }

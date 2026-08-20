@@ -227,6 +227,56 @@ struct PatchActionButtons: View {
     }
 }
 
+struct PatchOperationProgressView: View {
+    let progress: PatchProgress?
+    let fallbackMessage: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(title)
+                    .font(.callout.weight(.semibold))
+                Spacer(minLength: 0)
+                if let fraction = progress?.fraction {
+                    Text("\(Int((fraction * 100).rounded()))%")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if let fraction = progress?.fraction {
+                ProgressView(value: fraction, total: 1)
+                    .progressViewStyle(.linear)
+            }
+
+            Text(progress?.message ?? fallbackMessage)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var title: String {
+        switch progress?.operation {
+        case .restore: return "Restoring ChatGPT"
+        case .patch: return "Patching ChatGPT"
+        case nil: return "Working safely"
+        }
+    }
+
+    private var accessibilityLabel: String {
+        let message = progress?.message ?? fallbackMessage
+        if let fraction = progress?.fraction {
+            return "\(title), \(Int((fraction * 100).rounded())) percent. \(message)"
+        }
+        return "\(title). \(message)"
+    }
+}
+
 struct AgentRepairPromptButton: View {
     @ObservedObject var model: AppModel
 

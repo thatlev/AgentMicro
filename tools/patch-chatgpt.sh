@@ -156,10 +156,15 @@ INSPECTOR="$(first_file \
     "$RUNTIME_ROOT/asar-inspect.cjs" \
     "$REPO_ROOT/macos/AgentMicro/PatchRuntime/asar-inspect.cjs" || true)"
 
-SHIM_SRC="$(first_file \
-    "${AGENT_MICRO_SHIM:-}" \
-    "$RUNTIME_ROOT/codex-hid-shim.js" \
-    "$REPO_ROOT/tools/AgentMicroBridge/codex-hid-shim.js" || true)"
+if [ "${AGENT_MICRO_SHIM+x}" = "x" ]; then
+    # An explicit runtime path is authoritative. Falling back when it is
+    # missing would hide an incomplete distributed app and offer Patch anyway.
+    SHIM_SRC="$(first_file "$AGENT_MICRO_SHIM" || true)"
+else
+    SHIM_SRC="$(first_file \
+        "$RUNTIME_ROOT/codex-hid-shim.js" \
+        "$REPO_ROOT/tools/AgentMicroBridge/codex-hid-shim.js" || true)"
+fi
 
 ASAR_JS="$(first_file \
     "${AGENT_MICRO_ASAR_JS:-}" \
@@ -606,6 +611,8 @@ validate_legacy_backup_full() {
 
 ensure_pristine_backup() {
     if full_backup_is_valid_quick; then
+        emit_event "progress" "backup" \
+            "Validating the complete signed ChatGPT backup…" 0.22
         validate_complete_backup_full
         return 0
     fi
@@ -788,7 +795,8 @@ if [ "$MODE" = "restore" ]; then
     case "$BACKUP_KIND" in
         complete-signed)
             require_free_space 2 "$(dirname "$APP")" "${TMPDIR:-/tmp}"
-            emit_event "progress" "validating-backup" "Validating the complete signed ChatGPT backup…" 0.15
+            emit_event "progress" "validating-complete-backup" \
+                "Validating the complete signed ChatGPT backup…" 0.8
             validate_complete_backup_full
 
             request_chatgpt_quit
