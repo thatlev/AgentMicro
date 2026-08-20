@@ -6,7 +6,9 @@ struct OnboardingView: View {
     let onFinish: () -> Void
 
     @State private var step = Step.welcome
+    @State private var didCopySetupPrompt = false
     @State private var copiedSetupPrompt = false
+    @State private var copyFeedbackGeneration = 0
     @State private var openedX = false
     @State private var openedGitHub = false
     @State private var confirmingPatch = false
@@ -186,9 +188,9 @@ struct OnboardingView: View {
             )
 
             HStack(spacing: 12) {
-                appBadge("Claude", bundleIDs: ["com.anthropic.claudefordesktop"], fallback: "sparkles")
-                appBadge("ChatGPT", bundleIDs: ["com.openai.chat"], fallback: "bubble.left.and.bubble.right.fill")
-                appBadge("Cursor", bundleIDs: ["com.todesktop.230313mzl4w4u92"], fallback: "cursorarrow")
+                appBadge("Claude", assetName: "ClaudeAppIcon")
+                appBadge("ChatGPT", assetName: "ChatGPTAppIcon")
+                appBadge("Cursor", assetName: "CursorAppIcon")
             }
 
             VStack(alignment: .leading, spacing: 10) {
@@ -207,8 +209,11 @@ struct OnboardingView: View {
                         copySetupPrompt()
                     } label: {
                         Label(copiedSetupPrompt ? "Copied" : "Copy setup prompt", systemImage: copiedSetupPrompt ? "checkmark" : "doc.on.doc")
+                            .contentTransition(.symbolEffect(.replace))
+                            .frame(minWidth: 126)
                     }
                     .buttonStyle(.borderedProminent)
+                    .help(copiedSetupPrompt ? "Copied. Click to copy it again." : "Copy the complete setup prompt.")
                 }
             }
             .padding(16)
@@ -231,27 +236,27 @@ struct OnboardingView: View {
                     : "Keep the phone unlocked and nearby. AgentMicro will connect automatically after the app opens."
             )
 
-            HStack(spacing: 14) {
-                Circle()
-                    .fill((model.isPhoneReady ? Color.green : Color.orange).opacity(0.13))
-                    .frame(width: 46, height: 46)
-                    .overlay {
-                        Image(systemName: model.isPhoneReady ? "checkmark" : "antenna.radiowaves.left.and.right")
-                            .font(.title3.weight(.semibold))
-                            .foregroundStyle(model.isPhoneReady ? .green : .orange)
+            if !model.isPhoneReady {
+                HStack(spacing: 14) {
+                    Circle()
+                        .fill(Color.orange.opacity(0.13))
+                        .frame(width: 46, height: 46)
+                        .overlay {
+                            Image(systemName: "antenna.radiowaves.left.and.right")
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(.orange)
+                        }
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Waiting for iPhone")
+                            .font(.headline)
+                        Text(model.phoneStatus)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
                     }
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(model.isPhoneReady ? "iPhone ready" : "Waiting for iPhone")
-                        .font(.headline)
-                    Text(model.phoneStatus)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
+                    Spacer()
 
-                Spacer()
-
-                if !model.isPhoneReady {
                     ProgressView()
                         .controlSize(.small)
                     Button("Check again") {
@@ -259,15 +264,13 @@ struct OnboardingView: View {
                     }
                     .disabled(model.isBusy)
                 }
-            }
-            .padding(18)
-            .frame(maxWidth: 500)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-            )
+                .padding(18)
+                .frame(maxWidth: 500)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color(nsColor: .controlBackgroundColor))
+                )
 
-            if !model.isPhoneReady {
                 Text("If Xcode says the app is no longer available, build it to the phone again. Free Apple ID builds expire after seven days.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -283,23 +286,25 @@ struct OnboardingView: View {
             stepHeading(
                 icon: "point.3.connected.trianglepath.dotted",
                 tint: .blue,
-                title: "Choose where your agents live",
-                detail: "Both options work with AgentMicro. Pick the desktop experience that fits your setup."
+                title: "Use more models with AgentMicro",
+                detail: "Optional—AgentMicro is already ready. Add one workspace for every coding agent, or bring other models directly into ChatGPT."
             )
 
             VStack(spacing: 10) {
                 projectRow(
                     icon: "rectangle.3.group.fill",
+                    assetName: "T3CodeAppIcon",
+                    emphasized: true,
                     title: "T3 Code",
-                    detail: "A desktop workspace for controlling multiple coding agents with AgentMicro.",
-                    button: "Open fork",
+                    detail: "Run Claude, ChatGPT, Codex, and other coding agents side by side in one desktop app.",
+                    button: "View T3 Code",
                     url: Links.t3Code
                 )
                 projectRow(
                     icon: "terminal.fill",
-                    title: "OpenCodex",
-                    detail: "Connect AgentMicro to agent workflows from ChatGPT, Codex, Claude Code, or Cursor.",
-                    button: "Open project",
+                    title: "OpenCodex for ChatGPT",
+                    detail: "Add Claude, Codex, and other models directly inside the ChatGPT app.",
+                    button: "View OpenCodex",
                     url: Links.openCodex
                 )
             }
@@ -355,12 +360,7 @@ struct OnboardingView: View {
 
             Spacer()
 
-            if step != .finish {
-                Button("Skip") { move(to: step.rawValue + 1) }
-                    .foregroundStyle(.secondary)
-            }
-
-            Button(step == .finish ? "Finish" : "Continue") {
+            Button(footerActionTitle) {
                 if step == .finish {
                     onFinish()
                 } else {
@@ -368,15 +368,26 @@ struct OnboardingView: View {
                 }
             }
             .buttonStyle(.borderedProminent)
+            .tint(canContinue ? Color.accentColor : Color.gray)
             .keyboardShortcut(.defaultAction)
-            .disabled(!canContinue)
+            .disabled(step == .finish && !canContinue)
+            .accessibilityHint(
+                footerActionTitle == "Skip"
+                    ? "Move to the next setup step without completing this one."
+                    : "Complete this setup step and continue."
+            )
         }
+    }
+
+    private var footerActionTitle: String {
+        if step == .finish { return "Finish" }
+        return canContinue ? "Continue" : "Skip"
     }
 
     private var canContinue: Bool {
         switch step {
         case .chatGPT: return model.isChatGPTPatched && !model.isBusy
-        case .mobile: return copiedSetupPrompt
+        case .mobile: return didCopySetupPrompt
         case .connect: return model.isPhoneReady
         case .finish: return openedX && openedGitHub
         case .welcome, .agents: return true
@@ -462,10 +473,13 @@ struct OnboardingView: View {
         )
     }
 
-    private func appBadge(_ name: String, bundleIDs: [String], fallback: String) -> some View {
+    private func appBadge(_ name: String, assetName: String) -> some View {
         VStack(spacing: 8) {
-            InstalledApplicationIcon(bundleIDs: bundleIDs, fallback: fallback)
+            Image(assetName)
+                .resizable()
+                .scaledToFit()
                 .frame(width: 42, height: 42)
+                .accessibilityHidden(true)
             Text(name)
                 .font(.caption.weight(.medium))
         }
@@ -476,12 +490,32 @@ struct OnboardingView: View {
         )
     }
 
-    private func projectRow(icon: String, title: String, detail: String, button: String, url: URL) -> some View {
+    private func projectRow(
+        icon: String,
+        assetName: String? = nil,
+        emphasized: Bool = false,
+        title: String,
+        detail: String,
+        button: String,
+        url: URL
+    ) -> some View {
         HStack(spacing: 14) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 38)
+            Group {
+                if let assetName {
+                    Image(assetName)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(
+                            width: emphasized ? 44 : 32,
+                            height: emphasized ? 44 : 32
+                        )
+                } else {
+                    Image(systemName: icon)
+                        .font(.title2)
+                        .foregroundStyle(Color.accentColor)
+                }
+            }
+            .frame(width: emphasized ? 50 : 38)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.headline)
                 Text(detail)
@@ -492,10 +526,14 @@ struct OnboardingView: View {
             Spacer(minLength: 12)
             Button(button) { NSWorkspace.shared.open(url) }
         }
-        .padding(16)
+        .padding(emphasized ? 19 : 16)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor))
+                .fill(
+                    emphasized
+                        ? Color.accentColor.opacity(0.08)
+                        : Color(nsColor: .controlBackgroundColor)
+                )
         )
     }
 
@@ -546,44 +584,32 @@ struct OnboardingView: View {
     private func copySetupPrompt() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(setupPrompt, forType: .string)
-        copiedSetupPrompt = true
+        didCopySetupPrompt = true
+        copyFeedbackGeneration += 1
+        let generation = copyFeedbackGeneration
+        withAnimation(.easeOut(duration: 0.16)) {
+            copiedSetupPrompt = true
+        }
+        NSAccessibility.post(
+            element: NSApp as Any,
+            notification: .announcementRequested,
+            userInfo: [
+                .announcement: "Setup prompt copied",
+                .priority: NSAccessibilityPriorityLevel.medium.rawValue,
+            ]
+        )
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
+            guard generation == copyFeedbackGeneration else { return }
+            withAnimation(.easeOut(duration: 0.16)) {
+                copiedSetupPrompt = false
+            }
+        }
     }
 
     private var setupPrompt: String {
         """
         Set up AgentMicro on my connected iPhone. Follow \(Links.mobileSetup.absoluteString) exactly. Inspect prerequisites first; do not rename bundle IDs or protocol identifiers. Build, install, and launch the iPhone app, asking me only for Apple ID, signing-team, trust, or Developer Mode steps that require my click. Then verify the AgentMicro Mac app reports iPhone Ready.
         """
-    }
-}
-
-private struct InstalledApplicationIcon: View {
-    let bundleIDs: [String]
-    let fallback: String
-
-    var body: some View {
-        Group {
-            if let image = installedIcon {
-                Image(nsImage: image)
-                    .resizable()
-                    .scaledToFit()
-            } else {
-                Image(systemName: fallback)
-                    .resizable()
-                    .scaledToFit()
-                    .padding(8)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .accessibilityHidden(true)
-    }
-
-    private var installedIcon: NSImage? {
-        for identifier in bundleIDs {
-            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: identifier) {
-                return NSWorkspace.shared.icon(forFile: url.path)
-            }
-        }
-        return nil
     }
 }
 
