@@ -31,6 +31,9 @@ final class AppModel: ObservableObject {
     @Published private(set) var launchAtLogin = false
     @Published private(set) var showOnboarding: Bool
     @Published private(set) var isBusy = false
+    /// Live progress for a running patch or restore, so the popover can show
+    /// what is happening rather than an unexplained spinner. Nil when idle.
+    @Published private(set) var operationProgress: PatchProgress?
     @Published private(set) var canPatch = false
     @Published private(set) var canRestore = false
     @Published private(set) var integrationNeedsUpdate = false
@@ -42,6 +45,10 @@ final class AppModel: ObservableObject {
     /// True when the ChatGPT integration is not in a working patched state and
     /// therefore needs the user to see the integration panel.
     @Published private(set) var integrationNeedsAttention = false
+    @Published private(set) var isChatGPTPatched = false
+    @Published private(set) var isPhoneReady = false
+    @Published private(set) var isRouteVerified = false
+    @Published private(set) var isPatchStatusReady = false
 
     private let bridgeEngine: AgentMicroBridgeEngine
     private let patchManager: PatchManager
@@ -87,8 +94,10 @@ final class AppModel: ObservableObject {
 
         self.patchManager.$progress
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                guard let self, self.operationMessage != nil else { return }
+            .sink { [weak self] progress in
+                guard let self else { return }
+                self.operationProgress = self.isBusy ? progress : nil
+                guard self.operationMessage != nil else { return }
                 self.recomputePresentation()
             }
             .store(in: &subscriptions)
@@ -230,6 +239,7 @@ final class AppModel: ObservableObject {
             let result = await self.patchManager.patch(relaunch: true)
             self.isBusy = false
             self.operationMessage = nil
+            self.operationProgress = nil
             if result.succeeded {
                 self.operationFailure = nil
                 self.bridgeEngine.reconnect()
@@ -252,6 +262,7 @@ final class AppModel: ObservableObject {
             let result = await self.patchManager.restore(relaunch: true)
             self.isBusy = false
             self.operationMessage = nil
+            self.operationProgress = nil
             if result.succeeded {
                 self.operationFailure = nil
                 self.bridgeEngine.reconnect()
@@ -334,6 +345,7 @@ final class AppModel: ObservableObject {
     private func refreshPatchStatus() async {
         guard !isBusy else { return }
         await patchManager.refresh()
+        isPatchStatusReady = true
         notifyIfNewUnpatchedBuild()
         recomputePresentation()
     }
@@ -344,14 +356,26 @@ final class AppModel: ObservableObject {
         canRestore = patch.canRestore
         integrationNeedsUpdate = patch.state == .integrationUpdateRequired
         hasNoPatchAction = !patch.canPatch && !patch.canRestore
-        patchBlockedReason = Self.blockedReason(for: patch)
+        patchBlockedReason = isPatchStatusReady
+            ? Self.blockedReason(for: patch)
+            : "Checking the installed ChatGPT build…"
         // A healthy patched install still reports canRestore, so attention is
         // decided by the state itself rather than by which buttons are live.
         integrationNeedsAttention = patch.state != .compatiblePatched
+        isChatGPTPatched = patch.state == .compatiblePatched
+        isPhoneReady = bridgeStatus.bluetooth == .linked && bridgeStatus.reportStreamReady
+        isRouteVerified = bridgeStatus.isOperational
         phoneStatus = phoneStatusText
         patchStatusText = patchStatus
         chatGPTStatus = chatGPTStatusText
         lastRoundTripText = lastRoundTripDescription
+
+        if !isPatchStatusReady, operationMessage == nil {
+            overallState = .connecting
+            headline = "Checking ChatGPT"
+            detail = "Reading the installed build before offering a patch or restore action."
+            return
+        }
 
         if let operationFailure {
             overallState = .failed

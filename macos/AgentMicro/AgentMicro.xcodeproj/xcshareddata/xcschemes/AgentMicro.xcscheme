@@ -15,7 +15,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "6F3F55EBA0A7FF78578BFB0F"
+               BlueprintIdentifier = "204707A1EF183A5FF5CC5A01"
                BuildableName = "AgentMicro.app"
                BlueprintName = "AgentMicro"
                ReferencedContainer = "container:AgentMicro.xcodeproj">
@@ -32,7 +32,7 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "6F3F55EBA0A7FF78578BFB0F"
+            BlueprintIdentifier = "204707A1EF183A5FF5CC5A01"
             BuildableName = "AgentMicro.app"
             BlueprintName = "AgentMicro"
             ReferencedContainer = "container:AgentMicro.xcodeproj">
@@ -55,7 +55,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "6F3F55EBA0A7FF78578BFB0F"
+            BlueprintIdentifier = "204707A1EF183A5FF5CC5A01"
             BuildableName = "AgentMicro.app"
             BlueprintName = "AgentMicro"
             ReferencedContainer = "container:AgentMicro.xcodeproj">
@@ -74,7 +74,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "6F3F55EBA0A7FF78578BFB0F"
+            BlueprintIdentifier = "204707A1EF183A5FF5CC5A01"
             BuildableName = "AgentMicro.app"
             BlueprintName = "AgentMicro"
             ReferencedContainer = "container:AgentMicro.xcodeproj">

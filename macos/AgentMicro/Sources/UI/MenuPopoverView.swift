@@ -15,6 +15,12 @@ struct MenuPopoverView: View {
             statusSummary
                 .padding(16)
 
+            if model.isBusy {
+                Divider()
+                operationProgress
+                    .padding(14)
+            }
+
             if showsIntegrationAction {
                 Divider()
                 integrationAction
@@ -113,23 +119,23 @@ struct MenuPopoverView: View {
                     .foregroundStyle(StatusTone.actionRequired.color)
             }
 
-            // Two disabled buttons read as a broken app. When neither action can
-            // run, show the recovery step instead, since none of these states
-            // resolve on their own.
             if model.hasNoPatchAction {
                 Text(model.patchBlockedReason)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityLabel("How to fix: \(model.patchBlockedReason)")
-            } else {
-                PatchActionButtons(
-                    model: model,
-                    compact: true,
-                    onDialogPresented: onDialogPresented,
-                    onDialogDismissed: onDialogDismissed
-                )
             }
+
+            // Keep both recovery operations visible anywhere short of a fully
+            // verified route. Their individual disabled states communicate
+            // which operation is safe for the detected ChatGPT installation.
+            PatchActionButtons(
+                model: model,
+                compact: true,
+                onDialogPresented: onDialogPresented,
+                onDialogDismissed: onDialogDismissed
+            )
         }
         .padding(12)
         .background(
@@ -171,18 +177,68 @@ struct MenuPopoverView: View {
         // a copy change cannot silently hide the panel. "Not found" and
         // "Runtime unavailable" matched none of the old keywords, which hid the
         // only explanation the user would have received.
-        model.integrationNeedsAttention
+        model.overallState != .healthy
     }
 
     private var integrationActionTitle: String {
-        model.integrationNeedsUpdate ? "Update the ChatGPT integration" : "Enable ChatGPT integration"
+        if model.integrationNeedsUpdate { return "Update the ChatGPT integration" }
+        if model.isChatGPTPatched { return "ChatGPT recovery" }
+        return "Enable ChatGPT integration"
     }
 
     private var integrationActionDetail: String {
         if model.integrationNeedsUpdate {
             return "Restore ChatGPT first, then choose Patch ChatGPT. This is normally needed only after ChatGPT or AgentMicro updates."
         }
+        if model.isChatGPTPatched {
+            return "The patch is current. Restore is available if ChatGPT needs to return to its original files."
+        }
         return "Patch ChatGPT once to enable the complete iPhone route."
+    }
+
+    private var operationProgress: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(operationTitle)
+                    .font(.callout.weight(.semibold))
+                Spacer(minLength: 0)
+                if let fraction = model.operationProgress?.fraction {
+                    Text("\(Int((fraction * 100).rounded()))%")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if let fraction = model.operationProgress?.fraction {
+                ProgressView(value: fraction, total: 1)
+                    .progressViewStyle(.linear)
+            }
+
+            Text(model.operationProgress?.message ?? model.detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(operationAccessibilityLabel)
+    }
+
+    private var operationTitle: String {
+        switch model.operationProgress?.operation {
+        case .restore: return "Restoring ChatGPT"
+        case .patch: return "Patching ChatGPT"
+        case nil: return "Working safely"
+        }
+    }
+
+    private var operationAccessibilityLabel: String {
+        let message = model.operationProgress?.message ?? model.detail
+        if let fraction = model.operationProgress?.fraction {
+            return "\(operationTitle), \(Int((fraction * 100).rounded())) percent. \(message)"
+        }
+        return "\(operationTitle). \(message)"
     }
 
     private var overallTone: StatusTone {

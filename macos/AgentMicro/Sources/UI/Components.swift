@@ -107,14 +107,23 @@ struct ActionButton: View {
     let systemImage: String
     var help: String
     var isDisabled = false
+    var isLoading = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.caption.weight(.medium))
-                .frame(maxWidth: .infinity)
-                .lineLimit(1)
+            HStack(spacing: 6) {
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: systemImage)
+                }
+                Text(title)
+                    .lineLimit(1)
+            }
+            .font(.caption.weight(.medium))
+            .frame(maxWidth: .infinity)
         }
         .buttonStyle(.bordered)
         .controlSize(.regular)
@@ -196,7 +205,8 @@ struct PatchActionButtons: View {
             title: "Patch ChatGPT",
             systemImage: "wrench.and.screwdriver",
             help: "Apply the AgentMicro integration after confirmation.",
-            isDisabled: model.isBusy || !model.canPatch
+            isDisabled: model.isBusy || !model.canPatch,
+            isLoading: model.isBusy && model.operationProgress?.operation == .patch
         ) {
             onDialogPresented()
             pendingAction = .patch
@@ -208,7 +218,8 @@ struct PatchActionButtons: View {
             title: "Restore ChatGPT",
             systemImage: "arrow.uturn.backward",
             help: "Restore ChatGPT to its original files after confirmation.",
-            isDisabled: model.isBusy || !model.canRestore
+            isDisabled: model.isBusy || !model.canRestore,
+            isLoading: model.isBusy && model.operationProgress?.operation == .restore
         ) {
             onDialogPresented()
             pendingAction = .restore

@@ -11,6 +11,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     private let statusDot = StatusDotView()
     private var subscriptions = Set<AnyCancellable>()
     private var settingsWindowController: NSWindowController?
+    private var onboardingWindowController: NSWindowController?
     private var localEventMonitor: Any?
     private var globalEventMonitor: Any?
     private var appResignActiveObserver: NSObjectProtocol?
@@ -50,7 +51,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
 
     func showOnboardingIfNeeded() {
         guard model.showOnboarding else { return }
-        showSettings()
+        showOnboarding()
     }
 
     private func configureStatusItem() {
@@ -176,13 +177,9 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         guard let button = statusItem.button else { return }
 
         let tone = overallTone
-        let patchValue = model.patchStatusText.lowercased()
-        let showsIntegrationAction = patchValue.contains("required")
-            || patchValue.contains("update")
-            || patchValue.contains("unsupported")
         popover.contentSize = NSSize(
             width: 310,
-            height: showsIntegrationAction ? 450 : (tone == .healthy ? 300 : 345)
+            height: tone == .healthy ? 300 : (model.isBusy ? 535 : 475)
         )
         statusDot.isHidden = tone == .healthy
         statusDot.color = tone.nsColor
@@ -413,6 +410,41 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
         settingsWindowController?.showWindow(nil)
         settingsWindowController?.window?.makeKeyAndOrderFront(nil)
+    }
+
+    private func showOnboarding() {
+        closePopover()
+
+        if onboardingWindowController == nil {
+            let hostingController = NSHostingController(
+                rootView: OnboardingView(
+                    model: model,
+                    onFinish: { [weak self] in self?.finishOnboarding() }
+                )
+            )
+            let window = NSWindow(contentViewController: hostingController)
+            window.title = "Set Up AgentMicro"
+            window.identifier = NSUserInterfaceItemIdentifier("AgentMicroOnboarding")
+            window.styleMask = [.titled, .closable, .miniaturizable]
+            window.setContentSize(NSSize(width: 720, height: 580))
+            window.minSize = NSSize(width: 680, height: 540)
+            window.isReleasedWhenClosed = false
+            window.center()
+            onboardingWindowController = NSWindowController(window: window)
+        }
+
+        NSApp.activate(ignoringOtherApps: true)
+        onboardingWindowController?.showWindow(nil)
+        onboardingWindowController?.window?.makeKeyAndOrderFront(nil)
+    }
+
+    private func finishOnboarding() {
+        model.completeOnboarding()
+        onboardingWindowController?.close()
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.popover.isShown else { return }
+            self.togglePopover(nil)
+        }
     }
 
     private var overallTone: StatusTone {
