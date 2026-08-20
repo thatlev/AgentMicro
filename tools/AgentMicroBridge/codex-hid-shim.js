@@ -1,4 +1,4 @@
-// codex-hid-shim.js — injected into the ChatGPT desktop app by patch-chatgpt.sh.
+// codex-hid-shim.js - injected into the ChatGPT desktop app by patch-chatgpt.sh.
 //
 // The app detects a AgentMicro through a native IOKit watcher
 // (findAgentMicroInterfaces / watch) and then talks to it through node-hid.
@@ -31,7 +31,7 @@ const USAGE_PAGE = 65280; // 0xFF00
 const FAKE_PATH = 'codex-bridge://virtual/codex-micro';
 
 // AgentMicro-only control channel (device→shim). Not part of the AgentMicro
-// wire protocol — mirrors the bridge's channel-3 layout sync but flows the
+// wire protocol - mirrors the bridge's channel-3 layout sync but flows the
 // other way: the phone/emulator asks the shim to run a host-side action the
 // device protocol has no command for (e.g. clearing the composer). The shim
 // consumes these frames and never forwards them to node-hid, so ChatGPT's
@@ -203,7 +203,7 @@ function createBridge() {
       }
     });
     const drop = () => {
-      if (!socket) return; // 'error' then 'close' both fire — only reconnect once
+      if (!socket) return; // 'error' then 'close' both fire - only reconnect once
       socket.removeAllListeners(); socket.destroy(); socket = null;
       rxBuffer = Buffer.alloc(0);
       controlParser.reset();
@@ -236,7 +236,7 @@ function createBridge() {
   // A device→host report is [reportId=6][channel][len][payload…]. Channel 4 is
   // the AgentMicro control channel: parse the JSON body and run the requested
   // host-side action, then swallow the frame so node-hid never sees it. Returns
-  // true when the frame was a control frame (handled or malformed — either way
+  // true when the frame was a control frame (handled or malformed - either way
   // it must not be forwarded).
   function handleControlFrame(payload) {
     return controlParser.handleReport(payload);
@@ -251,7 +251,7 @@ function createBridge() {
   // Clear ChatGPT's message composer using stable Electron editing commands, so
   // no fragile patching of the minified renderer is needed. selectAll targets
   // the focused editable element; if the composer isn't focused, delete acts on
-  // a non-editable selection and is a harmless no-op — it can never wipe a
+  // a non-editable selection and is a harmless no-op - it can never wipe a
   // conversation, only the composer text.
   function clearComposer() {
     let electron;
@@ -383,7 +383,7 @@ function createBridge() {
     },
   };
 
-  // Synchronous HID class — unused on macOS (the app uses HIDAsync) but
+  // Synchronous HID class - unused on macOS (the app uses HIDAsync) but
   // provided so the module shape matches node-hid.
   class HID extends BridgeHIDAsync {
     constructor() { super(); }

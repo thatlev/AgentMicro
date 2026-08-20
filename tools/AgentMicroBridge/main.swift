@@ -1,4 +1,4 @@
-// AgentMicroBridge — macOS helper that links a AgentMicro device source to
+// AgentMicroBridge - macOS helper that links a AgentMicro device source to
 // the patched ChatGPT desktop app over a local Unix socket.
 //
 // Two device sources, selected by command line:
@@ -53,7 +53,7 @@ var bridgeLogObserver: ((String) -> Void)?
 /// Brings a desktop editor app to the front (macOS app activation) by bundle
 /// id. Used when the user double-taps an agent key: the tab is focused *inside*
 /// the editor and the whole app is raised above other windows. Best-effort and
-/// silent — if the app isn't running or no bundle id is known, it does nothing.
+/// silent - if the app isn't running or no bundle id is known, it does nothing.
 enum AppActivator {
     static func activate(bundleIdentifier: String?) {
         guard let bundleIdentifier, !bundleIdentifier.isEmpty else { return }
@@ -163,7 +163,7 @@ final class MacOSDictationController {
             NSAppleScript(source: script)?.executeAndReturnError(&error)
             if let error {
                 self.desiredActive.toggle()
-                log("t3: macOS dictation failed — \(error)")
+                log("t3: macOS dictation failed - \(error)")
                 self.onStateChange(
                     self.desiredActive,
                     "macOS Dictation could not be toggled. Confirm Dictation is enabled and AgentMicro has Accessibility access."
@@ -801,7 +801,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     private var healthProbeWorkItem: DispatchWorkItem?
     private let healthProbeInterval: TimeInterval = 30
     /// Slow re-drive of the end-to-end handshake while the link is yellow
-    /// (`.recovering`) but the transport is intact — see scheduleRecoveryRetry.
+    /// (`.recovering`) but the transport is intact - see scheduleRecoveryRetry.
     private var recoveryRetryWorkItem: DispatchWorkItem?
     private let recoveryRetryInterval: TimeInterval = 8
     private var phoneLivenessWorkItem: DispatchWorkItem?
@@ -809,7 +809,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     ///
     /// The only unsolicited device→Mac traffic is the iPhone app's foreground
     /// heartbeat, and iOS stops that timer the moment the app is not frontmost
-    /// — backgrounded, screen locked, even a notification banner. Silence
+    /// - backgrounded, screen locked, even a notification banner. Silence
     /// therefore says nothing about whether the app can still serve, so it no
     /// longer condemns the link on its own: it only triggers the probe below.
     private let phoneLivenessTimeout: TimeInterval = 40
@@ -946,7 +946,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         switch central.state {
         case .poweredOn:
             bluetoothState = .scanning
-            log("Bluetooth on — scanning for the AgentMicro iPhone app")
+            log("Bluetooth on - scanning for the AgentMicro iPhone app")
             startScanning()
         case .unauthorized:
             bluetoothState = .denied
@@ -961,7 +961,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
             bluetoothState = .poweredOff
             server.setPresent(false)
             server.setPhonePresent(false)
-            log("Bluetooth is off — turn it on in System Settings")
+            log("Bluetooth is off - turn it on in System Settings")
         case .unsupported:
             bluetoothState = .unavailable
             server.setPresent(false)
@@ -984,13 +984,13 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
                 currentSession: phoneAdvertisingSession,
                 discoveredSession: discoveredSession
             ) {
-                log("iPhone app session changed — refreshing stale connection")
+                log("iPhone app session changed - refreshing stale connection")
                 central.cancelPeripheralConnection(current)
                 reset(preservePresence: true)
             }
             return
         }
-        log("found \(peripheral.name ?? "iPhone") (RSSI \(RSSI)) — connecting")
+        log("found \(peripheral.name ?? "iPhone") (RSSI \(RSSI)) - connecting")
         phone = peripheral
         phoneConnected = false
         bluetoothState = .connecting
@@ -1014,7 +1014,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         phoneConnected = true
         bluetoothState = .linked
-        log("connected — discovering bridge service")
+        log("connected - discovering bridge service")
         publishStatus()
         peripheral.discoverServices([bridgeServiceUUID])
     }
@@ -1022,14 +1022,14 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
         guard phone?.identifier == peripheral.identifier else { return }
         phoneConnected = false
-        log("connect failed: \(error?.localizedDescription ?? "unknown error") — rescanning")
+        log("connect failed: \(error?.localizedDescription ?? "unknown error") - rescanning")
         reset(preservePresence: presenceDropWorkItem != nil)
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         guard phone?.identifier == peripheral.identifier else { return }
         phoneConnected = false
-        log("iPhone disconnected\(error.map { ": \($0.localizedDescription)" } ?? "") — preserving virtual device while rescanning")
+        log("iPhone disconnected\(error.map { ": \($0.localizedDescription)" } ?? "") - preserving virtual device while rescanning")
         reset(preservePresence: isSubscribed || presenceDropWorkItem != nil)
     }
 
@@ -1039,7 +1039,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         guard phone?.identifier == peripheral.identifier else { return }
         phoneConnected = isReconnecting
         log("iPhone link interrupted\(error.map { ": \($0.localizedDescription)" } ?? "")"
-            + (isReconnecting ? " — system auto-reconnect active" : " — rescanning"))
+            + (isReconnecting ? " - system auto-reconnect active" : " - rescanning"))
         if isReconnecting {
             schedulePresenceDrop()
             outputChar = nil
@@ -1104,7 +1104,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
             self.presenceDropWorkItem = nil
             self.server.setPresent(false)
             self.server.setPhonePresent(false)
-            log("iPhone reconnect grace expired — AgentMicro removed")
+            log("iPhone reconnect grace expired - AgentMicro removed")
         }
         presenceDropWorkItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + reconnectGrace, execute: work)
@@ -1113,7 +1113,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         guard error == nil,
               let service = peripheral.services?.first(where: { $0.uuid == bridgeServiceUUID }) else {
-            log("bridge service missing: \(error?.localizedDescription ?? "not present") — is the iPhone app in bridge mode?")
+            log("bridge service missing: \(error?.localizedDescription ?? "not present") - is the iPhone app in bridge mode?")
             central.cancelPeripheralConnection(peripheral)
             return
         }
@@ -1139,7 +1139,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
             central.cancelPeripheralConnection(peripheral)
             return
         }
-        log("subscribed to the iPhone report stream — AgentMicro is live")
+        log("subscribed to the iPhone report stream - AgentMicro is live")
         // Once the report stream is live, duplicate scan callbacks add no
         // information and can contain cached advertisements from before iOS
         // stopped advertising. Stop scanning until a real disconnect.
@@ -1230,7 +1230,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     /// Asks the app directly whether it is still there, instead of inferring it
     /// from traffic the app only produces while it is frontmost. iOS delivers
     /// GATT writes to a backgrounded app and it answers `sys.version` from its
-    /// normal RPC handler, so this distinguishes "quiet" from "gone" — which is
+    /// normal RPC handler, so this distinguishes "quiet" from "gone" - which is
     /// the distinction the silence timer alone could never make.
     private func probePhoneLiveness() {
         guard livenessProbeWorkItem == nil else { return }
@@ -1255,7 +1255,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     }
 
     private func dropUnresponsivePhone() {
-        log("iPhone did not answer a liveness probe — treating the mobile app as disconnected")
+        log("iPhone did not answer a liveness probe - treating the mobile app as disconnected")
         isSubscribed = false
         phoneConnected = false
         outputChar = nil
@@ -1430,7 +1430,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     /// Gives an in-flight handshake twelve seconds to complete, then falls
     /// back to `.recovering` (which re-drives the handshake on a slow loop).
     /// Armed by both a fresh handshake and a host request observed while the
-    /// link is still yellow — the latter previously left the state stuck at
+    /// link is still yellow - the latter previously left the state stuck at
     /// "awaiting iPhone reply" with no timer at all when the reply never came.
     private func armHandshakeTimeout() {
         guard healthCheckTimeoutWorkItem == nil else { return }
@@ -1553,7 +1553,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
             publishStatus()
         }
         sendConnectionHealthSnapshot()
-        log("connection health: \(state.rawValue) — \(detail)")
+        log("connection health: \(state.rawValue) - \(detail)")
     }
 
     /// `.recovering` used to promise "retrying automatically" without any
@@ -1561,7 +1561,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     /// handshake, so one wedged or timed-out ChatGPT check pinned the menu
     /// bar yellow until the user intervened. While the transport is intact
     /// (iPhone subscribed, ChatGPT shim linked), re-run the real handshake on
-    /// a slow loop — it heals itself the moment ChatGPT answers again, and
+    /// a slow loop - it heals itself the moment ChatGPT answers again, and
     /// stays silent while paused or while either side is genuinely gone.
     private func scheduleRecoveryRetry() {
         recoveryRetryWorkItem?.cancel()
@@ -1775,7 +1775,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
             }
             onVSCodeControl?(object)
         case "openURL":
-            // Open (and focus) a URL on this Mac — used by the T3 page's NEW key
+            // Open (and focus) a URL on this Mac - used by the T3 page's NEW key
             // to launch a fresh chat in the T3 desktop app via its registered
             // `t3code://` handler. Scheme-limited so a stray frame can't open
             // arbitrary files/apps.
@@ -1946,7 +1946,7 @@ final class Bridge: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     func requestHostResync() {
         guard !didRequestHostResync else { return }
         didRequestHostResync = true
-        log("no cached ChatGPT state — re-presenting device to trigger a resync")
+        log("no cached ChatGPT state - re-presenting device to trigger a resync")
         // The absent gap must outlast ChatGPT's topology-watch debounce, or the
         // detach+attach collapse into a no-op and it never reopens the device
         // (and so never replays lighting). 1.5s clears that comfortably.
@@ -2078,7 +2078,7 @@ final class EmuDevice {
     /// Host -> device: one raw node-hid write (64 bytes, report ID 6 first).
     func handleOutput(_ data: Data) {
         var d = data
-        // Data(dropping) rebases indices to zero — a bare dropFirst() slice
+        // Data(dropping) rebases indices to zero - a bare dropFirst() slice
         // keeps startIndex = 1 and d[0] would trap.
         if d.count >= 3 && d[0] == hidReportID { d = Data(d.dropFirst()) }
         guard d.count >= 2, d[0] == 2 else { return } // channel 2 = RPC
@@ -2172,7 +2172,7 @@ func startStdinLoop(_ emu: EmuDevice) {
     let joyMap: [String: Float] = ["right": 0.0, "down": 0.25, "left": 0.5, "up": 0.75]
 
     print("""
-    Emulate mode — inject device events:
+    Emulate mode - inject device events:
       ag0..ag5 press|release      agent key (default: press+release)
       fast|approve|decline|fork|mic|send [press|release]
       up|down|left|right [press|release]
@@ -2329,7 +2329,7 @@ final class VSCodeClient {
         lock.unlock()
         close(f)
         onConnectionChange(false)
-        log("VSCode extension disconnected — will retry")
+        log("VSCode extension disconnected - will retry")
     }
 
     /// Unix permits a listening socket pathname to be replaced while an old
@@ -2346,7 +2346,7 @@ final class VSCodeClient {
         guard currentFD >= 0 else { return }
         let current = socketPathIdentity()
         guard current == nil || expected == nil || current != expected else { return }
-        log("VSCode socket owner changed — reconnecting to the frontmost window")
+        log("VSCode socket owner changed - reconnecting to the frontmost window")
         shutdown(currentFD, SHUT_RDWR)
     }
 
@@ -2360,7 +2360,7 @@ final class VSCodeClient {
 /// Maps the six agent keys to concrete editor/terminal target IDs. The stored
 /// id is authoritative, but each pin also remembers the target's provider,
 /// title, and workspace so it can re-find the SAME conversation after its id
-/// churns — which happens every time the VS Code extension host reactivates (a
+/// churns - which happens every time the VS Code extension host reactivates (a
 /// window reload re-mints every webview tab id). Re-attachment is only done when
 /// the match is unambiguous, so a pin never silently jumps to a different chat.
 final class PinMap {
@@ -2401,7 +2401,7 @@ final class PinMap {
 
     /// Re-find the same conversation whose id has changed (extension-host
     /// reactivation re-mints every webview tab id on a window reload). Match on
-    /// the stable, human-meaningful attributes — provider + title + workspace —
+    /// the stable, human-meaningful attributes - provider + title + workspace -
     /// but only when EXACTLY ONE editor/agent tab matches, so a pin can never
     /// silently jump to a different chat. Returns nil for terminals (their id is
     /// a runtime UUID with no stable attributes) and for ambiguous matches
@@ -2443,7 +2443,7 @@ final class PinMap {
             backfill(index, from: match)
             return id
         }
-        // Exact id gone — try to re-find the same conversation and adopt its new id.
+        // Exact id gone - try to re-find the same conversation and adopt its new id.
         if let newID = reattachedID(for: pin, targets: targets) {
             pins[index]?.id = newID
             save()
@@ -2466,7 +2466,7 @@ final class PinMap {
                 return id
             }
             // The exact id vanished. Before treating the tab as missing, try to
-            // re-find the same conversation by its stable attributes — this is
+            // re-find the same conversation by its stable attributes - this is
             // what makes a pin survive a window reload that re-minted every
             // webview tab id. Adopt the new id so the pin self-heals.
             if let newID = reattachedID(for: pin, targets: targets), newID != id {
@@ -2570,7 +2570,7 @@ final class PinToggleGate {
 
 /// Watches AgentMicro's status.json and turns per-session status into agent-key
 /// lighting (v.oai.thstatus), so the macropad LEDs reflect live Claude / Codex /
-/// Kimi session state — the same source that drives the LED strip.
+/// Kimi session state - the same source that drives the LED strip.
 final class StatusLights {
     let path: String
     var push: ([String: Any]) -> Void = { _ in }
@@ -4204,7 +4204,7 @@ final class T3Controller {
     }
 
     /// Called when the user switches to the T3 page. Idempotent: starts the
-    /// backend the first time (lazily — nothing runs until the page is used),
+    /// backend the first time (lazily - nothing runs until the page is used),
     /// and refreshes + republishes on every later switch.
     func activate() {
         lock.lock(); let first = !started; started = true; lock.unlock()
@@ -4238,7 +4238,7 @@ final class T3Controller {
         let snapshot = snapshotNow()
         // Before the backend's first snapshot there is nothing to say, and
         // saying it anyway would blank the board: empty targets, no pins, every
-        // key off — which the phone renders as "Mac linked" with dark keys.
+        // key off - which the phone renders as "Mac linked" with dark keys.
         guard let snapshot else { return }
         let targets = snapshot.targets
         let selected = snapshot.pins.selectedTargetID
@@ -4371,7 +4371,7 @@ func startVSCodeStdinLoop(_ controller: VSCodeController) {
         "send": ("ACT12", nil),
     ]
     print("""
-    VSCode target (emulate) — inject events; ops go to the VSCode extension:
+    VSCode target (emulate) - inject events; ops go to the VSCode extension:
       ag0..ag5        focus the target pinned to that agent key
       approve         approve (Claude diff accept · terminal 'y')
       reject|decline  reject (Claude diff reject · terminal 'n')
@@ -4494,7 +4494,7 @@ func runBridgeRegressionTests() -> Bool {
         return fail("reattach: pin did not adopt the reloaded conversation's new id")
     }
     // Ambiguous titles (several untitled "Claude Code" tabs) must NEVER be
-    // guessed — better an unresolved key than focusing the wrong chat.
+    // guessed - better an unresolved key than focusing the wrong chat.
     let ambiguous = PinMap(path: directory.appendingPathComponent("ambiguous.json").path)
     _ = ambiguous.toggle("view:win1:e1", targets: [["id": "view:win1:e1", "kind": "agent-editor",
         "provider": "claude", "cwd": "/tmp/proj", "label": "Claude Code"]])
@@ -4545,7 +4545,7 @@ func runBridgeRegressionTests() -> Bool {
 
     // The Claude status hook cannot know a webview tab's view id, so it writes
     // sessions keyed by cwd + provider with NO targetId. The pinned key must
-    // still light blue for "working" via that fallback match — this is the exact
+    // still light blue for "working" via that fallback match - this is the exact
     // path behind "when an agent is working the key should be blue, not white".
     func writeHookStatus(_ status: String) -> Bool {
         let object: [String: Any] = ["sessions": ["hookSession": [
@@ -4851,7 +4851,7 @@ if target == .auto, !emulate {
     layoutWatcher.start()
     client.start()
     lights.start()
-    log("AgentMicro bridge auto mode — Codex and Claude Desktop are visible on iPhone")
+    log("AgentMicro bridge auto mode - Codex and Claude Desktop are visible on iPhone")
     log("VS Code socket: \(vscodeSocket)")
     bridge.start()
 } else if target == .vscode {
@@ -4877,7 +4877,7 @@ if target == .auto, !emulate {
         // and any older build keep working against this dedicated target.
         bridge.onDeviceEvent = { method, params in controller.handleEvent(method, params) }
         // This dedicated helper drives VS Code only. Ignore any T3-surface event
-        // rather than leaking it onto the VS Code controller — surfaces stay
+        // rather than leaking it onto the VS Code controller - surfaces stay
         // isolated even in the fixed-target mode. (Full T3 support is auto mode.)
         bridge.onVSCodeKey = { method, params, surface in
             guard surface == "vscode" else { return }
@@ -4900,11 +4900,11 @@ if target == .auto, !emulate {
         bridge.onRefreshRequest = { controller.refreshState(); lights.emit() }
         // NOTE: the legacy `setPins` path from the retired orange editor-pins
         // screen is intentionally NOT wired. It wrote pins.json as version 1,
-        // which PinMap.reload() treats as stale and wipes — a latent way to
+        // which PinMap.reload() treats as stale and wipes - a latent way to
         // erase every pin. No current iPhone build sends `setPins`; leaving
         // Bridge.onSetPins nil makes the command a harmless no-op.
         lights.start()
-        log("AgentMicro bridge (VS Code target) — keep the AgentMicro app open on your iPhone")
+        log("AgentMicro bridge (VS Code target) - keep the AgentMicro app open on your iPhone")
         log("Socket to extension: \(vscodeSocket)")
         bridge.start()
     }
@@ -4915,7 +4915,7 @@ if target == .auto, !emulate {
         server.onOutput = device.handleOutput
         server.setPresent(true)
         server.setPhonePresent(true)
-        log("emulated AgentMicro (VID 0x303A, PID 0x8360) is live — no iPhone needed")
+        log("emulated AgentMicro (VID 0x303A, PID 0x8360) is live - no iPhone needed")
         startStdinLoop(device)
     } else {
         let bridge = Bridge(server: server)
@@ -4930,7 +4930,7 @@ if target == .auto, !emulate {
         }
         bridge.onSubscribed = { layoutWatcher.onUpdate(layoutWatcher.current) }
         layoutWatcher.start()
-        log("AgentMicro bridge starting — keep the AgentMicro app open on your iPhone")
+        log("AgentMicro bridge starting - keep the AgentMicro app open on your iPhone")
         bridge.start()
     }
 }

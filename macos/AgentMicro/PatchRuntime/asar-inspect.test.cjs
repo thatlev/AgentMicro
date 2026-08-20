@@ -35,7 +35,7 @@ function fixtureFiles(kind) {
   const patched = kind !== 'pristine';
   const files = {
     'node_modules/@worklouder/node-hid/nodehid.js': patched
-      ? '// node-hid replacement — installed by patch-chatgpt.sh'
+      ? '// node-hid replacement - installed by patch-chatgpt.sh'
       : "module.exports=require('./build/Release/HID.node'); class HIDAsync {}",
     '.vite/build/codex-micro-service-fixture.js': patched
       ? newWatcher

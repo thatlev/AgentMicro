@@ -911,7 +911,7 @@ cp "$SHIM_SRC" "$EXTRACTED/codex-hid-shim.js"
 NODEHID_DIR="$(find "$EXTRACTED/node_modules/@worklouder" -type d -name node-hid 2>/dev/null | head -1)"
 [ -n "$NODEHID_DIR" ] || die "patching" "The expected Work Louder node-hid package was not found."
 cat > "$NODEHID_DIR/nodehid.js" <<'NODEHID_EOF'
-// node-hid replacement — installed by patch-chatgpt.sh (AgentMicro bridge).
+// node-hid replacement - installed by patch-chatgpt.sh (AgentMicro bridge).
 'use strict';
 
 const path = require('path');

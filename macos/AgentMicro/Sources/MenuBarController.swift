@@ -24,7 +24,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
     /// Clicking the status item while the popover is open delivers mouse-down
     /// and mouse-up as one physical click. The global monitor sees the
     /// mouse-down and closes, then the button's action fires on mouse-up and
-    /// reopens it — so a click that should have toggled the popover shut left
+    /// reopens it - so a click that should have toggled the popover shut left
     /// it open, and rapid clicking only highlighted the icon while the popover
     /// appeared stuck.
     private var lastOutsideClickCloseAt: Date?
@@ -185,7 +185,7 @@ final class MenuBarController: NSObject, NSPopoverDelegate, NSWindowDelegate {
         statusDot.color = tone.nsColor
 
         let stateDescription = tone.accessibilityDescription
-        let tooltip = "AgentMicro — \(model.headline)\n\(model.detail)"
+        let tooltip = "AgentMicro - \(model.headline)\n\(model.detail)"
         button.toolTip = tooltip
         button.setAccessibilityValue(stateDescription)
         button.setAccessibilityHelp("\(tooltip). Click to open status and controls.")

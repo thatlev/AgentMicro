@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 'use strict';
 
-// AgentMicro — Claude Code status feed.
+// AgentMicro - Claude Code status feed.
 //
 // Claude Code fires lifecycle hooks; this tiny hook translates them into the
 // legacy AgentMicro status file the AgentMicro bridge already reads
 // (~/Library/Caches/CodexMicro/status.json), so a pinned Claude conversation's
 // agent key lights BLUE while it is working, AMBER when it needs input, and
-// GREEN when it completes — instead of always white.
+// GREEN when it completes - instead of always white.
 //
 // It is deliberately minimal and defensive: it never blocks Claude, never
 // prints to stdout, and always exits 0 even on error, so it cannot disrupt a
@@ -46,7 +46,7 @@ function main() {
 
   const event = input.hook_event_name || process.argv[2] || '';
   const status = statusForEvent(event);
-  if (!status) return; // event we don't track — leave the file untouched
+  if (!status) return; // event we don't track - leave the file untouched
 
   const sessionId = String(input.session_id || input.sessionId || 'claude');
   const cwd = input.cwd || process.cwd();
@@ -59,7 +59,7 @@ function main() {
   try {
     const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
     if (parsed && typeof parsed.sessions === 'object' && parsed.sessions) data = parsed;
-  } catch (_) { /* first write or unreadable — start fresh */ }
+  } catch (_) { /* first write or unreadable - start fresh */ }
   if (!data.sessions || typeof data.sessions !== 'object') data.sessions = {};
 
   const now = Date.now() / 1000;

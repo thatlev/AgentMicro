@@ -1,4 +1,4 @@
-// AgentMicroEmu — macOS BLE peripheral emulating the Work Louder AgentMicro
+// AgentMicroEmu - macOS BLE peripheral emulating the Work Louder AgentMicro
 // vendor-HID control surface, to test ChatGPT Desktop detection & protocol.
 // Protocol reference: docs/agent-micro-protocol.md
 //
@@ -101,7 +101,7 @@ class Emu: NSObject, CBPeripheralManagerDelegate {
 
     func peripheralManager(_ p: CBPeripheralManager, central: CBCentral,
                            didSubscribeTo c: CBCharacteristic) {
-        if c.uuid == inputChar.uuid { subscribed = true; print("[host] subscribed to input report — host connected") }
+        if c.uuid == inputChar.uuid { subscribed = true; print("[host] subscribed to input report - host connected") }
     }
     func peripheralManager(_ p: CBPeripheralManager, central: CBCentral,
                            didUnsubscribeFrom c: CBCharacteristic) {

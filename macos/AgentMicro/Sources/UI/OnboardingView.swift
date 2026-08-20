@@ -209,8 +209,6 @@ struct OnboardingView: View {
                         copySetupPrompt()
                     } label: {
                         Label(copiedSetupPrompt ? "Copied" : "Copy setup prompt", systemImage: copiedSetupPrompt ? "checkmark" : "doc.on.doc")
-                            .contentTransition(.symbolEffect(.replace))
-                            .frame(minWidth: 126)
                     }
                     .buttonStyle(.borderedProminent)
                     .help(copiedSetupPrompt ? "Copied. Click to copy it again." : "Copy the complete setup prompt.")
@@ -287,7 +285,7 @@ struct OnboardingView: View {
                 icon: "point.3.connected.trianglepath.dotted",
                 tint: .blue,
                 title: "Use more models with AgentMicro",
-                detail: "Optional—AgentMicro is already ready. Add one workspace for every coding agent, or bring other models directly into ChatGPT."
+                detail: "This step is optional. AgentMicro is already ready. Add one workspace for every coding agent, or bring other models directly into ChatGPT."
             )
 
             VStack(spacing: 10) {
@@ -529,11 +527,7 @@ struct OnboardingView: View {
         .padding(emphasized ? 19 : 16)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(
-                    emphasized
-                        ? Color.accentColor.opacity(0.08)
-                        : Color(nsColor: .controlBackgroundColor)
-                )
+                .fill(Color(nsColor: .controlBackgroundColor))
         )
     }
 
@@ -587,9 +581,7 @@ struct OnboardingView: View {
         didCopySetupPrompt = true
         copyFeedbackGeneration += 1
         let generation = copyFeedbackGeneration
-        withAnimation(.easeOut(duration: 0.16)) {
-            copiedSetupPrompt = true
-        }
+        copiedSetupPrompt = true
         NSAccessibility.post(
             element: NSApp as Any,
             notification: .announcementRequested,
@@ -598,11 +590,9 @@ struct OnboardingView: View {
                 .priority: NSAccessibilityPriorityLevel.medium.rawValue,
             ]
         )
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
             guard generation == copyFeedbackGeneration else { return }
-            withAnimation(.easeOut(duration: 0.16)) {
-                copiedSetupPrompt = false
-            }
+            copiedSetupPrompt = false
         }
     }
 
