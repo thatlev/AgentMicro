@@ -21,14 +21,15 @@ Copy one command. It downloads the latest source, builds a self-contained
 Apple-silicon app, installs it in `/Applications`, and launches onboarding:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/thatlev/AgentMicro/main/scripts/install-macos.sh | bash
+curl -fsSL https://thatlev.com/install-agentmicro.sh | sh
 ```
 
-The installer is readable at
-[`scripts/install-macos.sh`](scripts/install-macos.sh). It requires macOS 14+,
-full Xcode, and Homebrew when XcodeGen or Node are not already installed. The
-local build is ad-hoc signed; public distribution still requires Developer ID
-signing and notarization.
+The installer downloads the latest public source, builds it locally, verifies
+the app, installs it in `/Applications`, clears the downloaded-source quarantine
+attribute, and launches onboarding. It requires macOS 14+, full Xcode, and
+Homebrew when XcodeGen or Node are not already installed. The local build is
+ad-hoc signed; public distribution still requires Developer ID signing and
+notarization.
 
 AgentMicro opens as a menu-bar app. First run guides you through the real setup:
 
