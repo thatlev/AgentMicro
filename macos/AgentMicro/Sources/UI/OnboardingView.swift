@@ -208,7 +208,12 @@ struct OnboardingView: View {
                     Button {
                         copySetupPrompt()
                     } label: {
-                        Label(copiedSetupPrompt ? "Copied" : "Copy setup prompt", systemImage: copiedSetupPrompt ? "checkmark" : "doc.on.doc")
+                        ZStack {
+                            Label("Copy setup prompt", systemImage: "doc.on.doc")
+                                .opacity(copiedSetupPrompt ? 0 : 1)
+                            Label("Copied", systemImage: "checkmark")
+                                .opacity(copiedSetupPrompt ? 1 : 0)
+                        }
                     }
                     .buttonStyle(.borderedProminent)
                     .help(copiedSetupPrompt ? "Copied. Click to copy it again." : "Copy the complete setup prompt.")
@@ -260,6 +265,8 @@ struct OnboardingView: View {
                     Button("Check again") {
                         model.reconnect()
                     }
+                    .buttonStyle(.bordered)
+                    .tint(.gray)
                     .disabled(model.isBusy)
                 }
                 .padding(18)
@@ -590,7 +597,7 @@ struct OnboardingView: View {
                 .priority: NSAccessibilityPriorityLevel.medium.rawValue,
             ]
         )
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
             guard generation == copyFeedbackGeneration else { return }
             copiedSetupPrompt = false
         }
