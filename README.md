@@ -73,6 +73,8 @@ disconnect T3 Code before returning to the ChatGPT companion.
 
 ## What the menu means
 
+![AgentMicro menu showing a verified iPhone to Mac to ChatGPT connection](docs/agentmicro-menu.webp)
+
 The menu reports the whole route, not just whether Bluetooth happens to be on:
 
 | State | Meaning |
