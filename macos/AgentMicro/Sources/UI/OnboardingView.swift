@@ -325,7 +325,8 @@ struct OnboardingView: View {
                     assetName: "XMark",
                     title: "Follow @thatlevco on X",
                     detail: "Product updates, demos, and new builds.",
-                    completed: openedX
+                    completed: openedX,
+                    isProfilePicture: true
                 ) {
                     openedX = true
                     NSWorkspace.shared.open(Links.xProfile)
@@ -533,6 +534,7 @@ struct OnboardingView: View {
         title: String,
         detail: String,
         completed: Bool,
+        isProfilePicture: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
