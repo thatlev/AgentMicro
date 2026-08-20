@@ -171,39 +171,36 @@ enum AgentMicroGlyph {
     }
 
     /// The menu bar image: mark-width, button-height, mark at the base.
-    static let image: NSImage = {
-        let image = NSImage(
-            size: NSSize(width: canvasSize, height: canvasHeight),
-            flipped: false
-        ) { fullRect in
-            drawMark(
-                in: NSRect(
-                    x: fullRect.minX,
-                    y: fullRect.minY + baselineInset,
-                    width: canvasSize,
-                    height: canvasSize
-                )
-            )
-            return true
-        }
-        image.isTemplate = true
-        image.accessibilityDescription = "AgentMicro"
-        return image
-    }()
+    ///
+    /// This must be a cached representation, not an `NSImage` drawing-handler
+    /// closure. AppKit can ask every status item to draw whenever *any* menu-bar
+    /// app changes. A lazy provider therefore reran all of this Bezier drawing
+    /// even though AgentMicro's glyph was static.
+    static let image = renderedImage(
+        size: NSSize(width: canvasSize, height: canvasHeight),
+        markRect: NSRect(
+            x: 0,
+            y: baselineInset,
+            width: canvasSize,
+            height: canvasSize
+        )
+    )
 
     /// The same mark on a square canvas, for use inside normal layout.
-    static let squareImage: NSImage = {
-        let image = NSImage(
-            size: NSSize(width: canvasSize, height: canvasSize),
-            flipped: false
-        ) { fullRect in
-            drawMark(in: fullRect)
-            return true
-        }
+    static let squareImage = renderedImage(
+        size: NSSize(width: canvasSize, height: canvasSize),
+        markRect: NSRect(x: 0, y: 0, width: canvasSize, height: canvasSize)
+    )
+
+    private static func renderedImage(size: NSSize, markRect: NSRect) -> NSImage {
+        let image = NSImage(size: size)
+        image.lockFocus()
+        drawMark(in: markRect)
+        image.unlockFocus()
         image.isTemplate = true
         image.accessibilityDescription = "AgentMicro"
         return image
-    }()
+    }
 }
 
 struct MicroGlyphView: View {
